@@ -8,10 +8,9 @@ use std::process::Command;
 use argh::FromArgs;
 use directories::ProjectDirs;
 use epub::doc::EpubDoc;
-use itertools::{EitherOrBoth, Itertools};
-use kuchikiki::traits::*;
 use maud::{DOCTYPE, html};
 use serde::{Deserialize, Serialize};
+use quick_xml::events::{BytesText, Event};
 
 //////////////
 //   Args   //
@@ -32,6 +31,7 @@ struct Args {
     #[argh(option, short = 's')]
     /// stylesheet name (in config.toml) to apply to output
     stylesheet: Option<String>,
+    // To add: single-book overrides for individual styles
 }
 
 ////////////////
@@ -275,7 +275,6 @@ impl Cache {
 struct TocItem {
     iri: PathBuf,
     path: PathBuf,
-    fragment: Option<String>,
     label: String,
     children: Vec<TocItem>,
     nesting_level: usize,
@@ -291,22 +290,90 @@ struct SpineItem {
 //   Functions   //
 ///////////////////
 
-fn inject_navigation(xhtml_doc: &mut kuchikiki::NodeRef, toc: &Vec<TocItem>, spine: &Vec<SpineItem>) {
+fn write_navigation_element(writer: &mut quick_xml::Writer<Vec<u8>>, book_contents_dir: &PathBuf, book_index_path: &PathBuf, spine: &Vec<SpineItem>, spine_position: usize) {
+    // This currently doesn't work if the spine items have '.xhtml' extensions, because apparently browser recognition of XHTML versus HTML is down to file extension. Figure out a fix, probably involving format-conversion.
+    use quick_xml::Error;
 
+    let previous_spine_path = if spine_position > 0 {
+        Some(&spine[spine_position - 1].path)
+    } else {
+        None
+    };
+    let next_spine_path = if spine_position < (spine.len() - 1) {
+        Some(&spine[spine_position + 1].path)
+    } else {
+        None
+    };
+
+    writer.create_element("div").write_inner_content::<_, Error>(|writer| {
+        writer.create_element("template").with_attribute(("shadowrootmode", "closed")).write_inner_content::<_, Error>(|writer| {
+            writer.create_element("nav").with_attribute(("style", "text-align: center;")).write_inner_content::<_, Error>(|writer| {
+                // Previous button
+                match previous_spine_path {
+                    Some(path) => writer.create_element("a").with_attribute(("href", book_contents_dir.join(path).as_os_str().to_str().unwrap())).write_inner_content::<_, Error>(|writer| {
+                        writer.create_element("button").with_attribute(("type", "button")).write_text_content(BytesText::new("Previous")).expect("XHTML writing error.");
+                        Ok(())
+                    }).expect("XHTML writing error."),
+                    None => writer.create_element("button").with_attributes([("type", "button"), ("disabled", "disabled")]).write_text_content(BytesText::new("Previous")).expect("XHTML writing error."),
+                };
+                // Index button
+                writer.create_element("a").with_attribute(("href", book_index_path.as_os_str().to_str().unwrap())).write_inner_content::<_, Error>(|writer| {
+                    writer.create_element("button").with_attribute(("type", "button")).write_text_content(BytesText::new("Index")).expect("XHTML writing error.");
+                    Ok(())
+                }).expect("XHTML writing error.");
+                // Next button
+                match next_spine_path {
+                    Some(path) => writer.create_element("a").with_attribute(("href", book_contents_dir.join(path).as_os_str().to_str().unwrap())).write_inner_content::<_, Error>(|writer| {
+                        writer.create_element("button").with_attribute(("type", "button")).write_text_content(BytesText::new("Next")).expect("XHTML writing error.");
+                        Ok(())
+                    }).expect("XHTML writing error."),
+                    None => writer.create_element("button").with_attributes([("type", "button"), ("disabled", "disabled")]).write_text_content(BytesText::new("Next")).expect("XHTML writing error."),
+                };
+                Ok(())
+            }).expect("XHTML writing error.");
+            Ok(())
+        }).expect("XHTML writing error.");
+        Ok(())
+    }).expect("XHTML writing error.");
 }
 
-fn inject_styles(xhtml_doc: &mut kuchikiki::NodeRef, stylesheet: &Stylesheet, css_path: &PathBuf) -> Option<Vec<u8>> {
-    None // Placeholder
+fn inject_navigation(xhtml: &Vec<u8>, book_contents_dir: &PathBuf, book_index_path: &PathBuf, spine: &Vec<SpineItem>, spine_position: usize) -> Vec<u8> {
+    let mut reader = quick_xml::Reader::from_reader(xhtml.as_ref());
+    let reader_config = reader.config_mut();
+    reader_config.enable_all_checks(true);
+    reader_config.expand_empty_elements = true;
+    let mut writer = quick_xml::Writer::new(Vec::new());
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) if e.name().as_ref() == b"body" => {
+                writer.write_event(Event::Start(e)).expect("XHTML writing error.");
+                write_navigation_element(&mut writer, book_contents_dir, book_index_path, spine, spine_position);
+            },
+            Ok(Event::End(e)) if e.name().as_ref() == b"body" => {
+                write_navigation_element(&mut writer, book_contents_dir, book_index_path, spine, spine_position);
+                writer.write_event(Event::End(e)).expect("XHTML writing error.");
+            }
+            Ok(Event::Eof) => break,
+            Ok(e) => writer.write_event(e.borrow()).expect("XHTML writing error."),
+            Err(e) => Err(e).expect("XHTML reading error."),
+        }
+    }
+
+    writer.into_inner()
 }
 
-fn process_spine_xhtml(xhtml: String, toc: &Vec<TocItem>, spine: &Vec<SpineItem>, stylesheet: &Stylesheet, css_path: &PathBuf) -> (Vec<u8>, Option<Vec<u8>>) {
-    let mut document = kuchikiki::parse_html().one(xhtml);
-    inject_navigation(&mut document, toc, spine);
-    let css = inject_styles(&mut document, stylesheet, css_path);
-    (document.to_string().into_bytes(), css) // Placeholder
+fn inject_styles(xhtml: &Vec<u8>, stylesheet: &Stylesheet, css_path: &PathBuf) -> (Vec<u8>, Option<Vec<u8>>) {
+    (xhtml.clone(), None) // Updated HTML, new stylesheet if applicable; placeholder
+}
+
+fn process_spine_xhtml(xhtml: &Vec<u8>, book_contents_dir: &PathBuf, book_index_path: &PathBuf, spine: &Vec<SpineItem>, spine_position: usize, stylesheet: &Stylesheet, css_path: &PathBuf) -> (Vec<u8>, Option<Vec<u8>>) {
+    let xhtml_with_navigation = inject_navigation(&xhtml, book_contents_dir, book_index_path, spine, spine_position);
+    inject_styles(&xhtml_with_navigation, stylesheet, css_path)
 }
 
 fn create_index_css(stylesheet: &Stylesheet) -> Option<String> {
+    // Add non-inline styling for the index table (overriding even override styles, at least pending addition of an override-even-reader-UI style-category)
     let mut css = String::new();
 
     let mut body_styles = Vec::new();
@@ -364,17 +431,19 @@ fn create_index_css(stylesheet: &Stylesheet) -> Option<String> {
 }
 
 fn localize_toc_item_format(nav_point: epub::doc::NavPoint, nesting_level: usize) -> TocItem {
-    let mut path_split = nav_point.content.to_str().unwrap().split("#").collect_vec();
-    let (path, fragment) = if path_split.len() > 1 {
-        let fragment = path_split.pop().unwrap();
-        (PathBuf::from(path_split.join("#")), Some(String::from(fragment)))
-    } else {
-        (PathBuf::from(path_split.first().unwrap()), None)
+
+    let mut path_split = nav_point.content.to_str().unwrap().split("#").collect::<Vec<&str>>();
+    let path = match path_split.len() {
+        0 => PathBuf::new(), // This should be possible per the EPUB spec, even if the library is failing to expose it well.
+        1 => PathBuf::from(path_split.first().unwrap()),
+        _ => {
+            let _fragment = path_split.pop().unwrap();
+            PathBuf::from(path_split.join("#"))
+        }
     };
     TocItem {
         iri: nav_point.content,
         path,
-        fragment,
         label: nav_point.label,
         children: nav_point.children.into_iter().map(|child| localize_toc_item_format(child, nesting_level + 1)).collect(),
         nesting_level,
@@ -474,11 +543,11 @@ fn create_index(book: &EpubDoc<BufReader<File>>, toc: &Vec<TocItem>, spine: &Vec
                     img alt="book cover image" src=(book_contents_dir.join(book.resources.get(&cover_id).unwrap().0.clone()).display());
                 }
                 p {
-                    a href=(spine.first().unwrap().path.display()) { "Start" }
+                    a href=(book_contents_dir.join(&spine.first().unwrap().path).display()) { "Start" }
                 }
                 // Bodymatter, if there's a good way to get it within the limits of this epub crate
                 p {
-                    a href=(spine.last().unwrap().path.display()) { "End" }
+                    a href=(book_contents_dir.join(&spine.last().unwrap().path).display()) { "End" }
                 }
                 table style="border-collapse: collapse; margin-left: auto; margin-right: auto;" {
                     // Factor styles out to the stylesheet probably (using the same techniques, in case of override, as are used for main book body)
@@ -547,19 +616,20 @@ fn dump_book(book: &mut EpubDoc<BufReader<File>>, index_dir: &PathBuf, styleshee
     create_dir_all(index_dir).expect(&format!("Couldn't create cache dir {}.", index_dir.display()));
     create_dir_all(&contents_dir).expect(&format!("Couldn't create epub subdir for cache dir {}. (This shouldn't happen.)", index_dir.display()));
     create_dir_all(&styles_dir).expect(&format!("Couldn't create styles subdir for cache dir {}. (This shouldn't happen.)", styles_dir.display()));
+    let index_path = index_dir.join("index.html");
 
     let mut dumped_bytes = 0;
 
-    let toc = book.toc.iter().map(|nav_point| localize_toc_item_format(nav_point.clone(), 0)).collect();
+    let toc = book.toc.iter().map(|nav_point| localize_toc_item_format(nav_point.clone(), 0)).collect::<Vec<TocItem>>();
     let spine = book.spine.iter().map(|spine_item_id| SpineItem {
         // Complexify once the epub crate adds support for nonlinearity
         path: book.resources.get(spine_item_id).unwrap().0.clone(),
         linear: true,
-    }).collect();
+    }).collect::<Vec<SpineItem>>();
     let book_ids_and_paths = book.resources.iter().map(|(id, (path, _mimetype))| {
         (id.clone(), path.clone())
-    }).collect_vec();
-    for (id, path) in book_ids_and_paths {
+    }).collect::<Vec<(String, PathBuf)>>();
+    for (id, mut path) in book_ids_and_paths {
         // This has a security hole against ill-formed EPUBs with paths leaking out of the zip container. Add some precautions there maybe.
         let (mut resource, resource_type) = book.get_resource(&id).unwrap();
         let resource_dir = contents_dir.join(path.parent().unwrap());
@@ -567,7 +637,6 @@ fn dump_book(book: &mut EpubDoc<BufReader<File>>, index_dir: &PathBuf, styleshee
         if book.spine.contains(&id) {
             match resource_type.as_ref() {
                 "application/xhtml+xml" => {
-                    let resource_string = book.get_resource_str(&id).unwrap().0;
                     let css_path = {
                         let mut possible_path = styles_dir.join(path.file_name().unwrap());
                         possible_path.set_extension("css");
@@ -579,14 +648,15 @@ fn dump_book(book: &mut EpubDoc<BufReader<File>>, index_dir: &PathBuf, styleshee
                         }
                         possible_path
                     };
+                    let resource_spine_position = spine.iter().position(|spine_item| spine_item.path == path).expect("Internal spine representation is ill-formed. (If this happens, please report it.)");
                     let resource_associated_css;
-                    (resource, resource_associated_css) = process_spine_xhtml(resource_string, &toc, &spine, stylesheet, &css_path);
+                    (resource, resource_associated_css) = process_spine_xhtml(&resource, &contents_dir, &index_path, &spine, resource_spine_position, stylesheet, &css_path);
                     if let Some(css) = resource_associated_css {
                         dumped_bytes += css.len();
                         write(contents_dir.join(&css_path), css).expect(&format!("Failed to write {} from book to disk.", css_path.display()));
                     }
                 },
-                "image/svg+xml" => println!("Warning: books with SVG spine items currently lack stylesheet support."),
+                "image/svg+xml" => println!("Warning: books with SVG spine items currently lack navigation and stylesheet support."),
                 _ => panic!("Spine contains item of type other than application/xhtml+xml or image/svg+xml.")
             }
         }
@@ -600,7 +670,7 @@ fn dump_book(book: &mut EpubDoc<BufReader<File>>, index_dir: &PathBuf, styleshee
     }
 
     let index = create_index(book, &toc, &spine, &contents_dir, index_css.is_some());
-    write(index_dir.join("index.html"), index).expect("Failed to write index.");
+    write(&index_path, index).expect("Failed to write index.");
 
     dumped_bytes
 }
