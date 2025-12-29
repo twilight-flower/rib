@@ -1,16 +1,22 @@
+mod library;
+
 use std::path::PathBuf;
 
 use argh::FromArgs;
+use directories::ProjectDirs;
+use epub::doc::EpubDoc;
+
+use crate::library::Library;
 
 //////////////
 //   Args   //
 //////////////
 
-#[derive(FromArgs)]
+#[derive(Clone, Copy, Debug, FromArgs)]
 #[argh(subcommand)]
 enum Subcommand {} // Placeholder
 
-#[derive(FromArgs)]
+#[derive(Clone, Debug, FromArgs)]
 /// Minimalist EPUB reader.
 struct Args {
     #[argh(subcommand)]
@@ -26,5 +32,9 @@ struct Args {
 
 fn main() {
     let args: Args = argh::from_env();
-    println!("Attempting to open {}.", args.path.display());
+
+    let project_dirs = ProjectDirs::from("", "", "rib")
+        .expect("Couldn't open cache: no home directory path found.");
+    let library_path = project_dirs.data_local_dir().join("library");
+    let library = Library::open(library_path);
 }
