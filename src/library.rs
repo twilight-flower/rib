@@ -16,7 +16,7 @@ pub struct LibraryBookRenditionInfo {
 }
 
 impl LibraryBookRenditionInfo {
-    pub fn open(&self, library_path: &PathBuf) {
+    pub fn open_in_browser(&self, library_path: &PathBuf) {
         let path_to_open = library_path
             .join(&self.file_path_from_library_root)
             .canonicalize()
@@ -30,40 +30,68 @@ pub struct LibraryBookInfo {
     // Identifiers
     pub id: String,
     pub title: String,
-    // creators: Vec<String>,
 
     // Library-management-relevant metadata
     pub path_from_library_root: PathBuf,
-    pub raw_rendition: Option<LibraryBookRenditionInfo>,
+    pub raw_rendition: LibraryBookRenditionInfo,
     // pub renditions: Vec<LibraryBookRenditionInfo>,
-    // raw_dump_hash: String,
     // bytes: u64
 }
 
 impl LibraryBookInfo {
-    pub fn from_epub(library: &Library, epub: &EpubDoc<BufReader<File>>) -> Self {
-        let id = match epub.get_release_identifier() {
-            Some(id) => id,
-            None => epub
-                .unique_identifier
-                .as_ref()
-                .expect("Ill-formed EPUB: no unique identifier.")
-                .clone(),
-        };
-        let title = epub.get_title().expect("Ill-formed EPUB: no title.");
-        // let creators = epub.metadata.iter().filter_map(|metadata_item| {
-        // 	match &metadata_item.property == "creator" {
-        // 		true => Some(metadata_item.value.clone()),
-        // 		false => None,
-        // 	}
-        // }).collect();
-        let path_from_library_root = library.get_internal_path_from_id(&id);
+    fn new_from_epub(library: &mut Library, epub: &mut EpubDoc<BufReader<File>>, epub_id: String, epub_path: &PathBuf) -> Self {
+        let path_from_library_root = library.get_internal_path_from_id(&epub_id);
+        let raw_dir_path_from_library_root = path_from_library_root.join("raw");
+        let raw_dir = library.library_path.join(&raw_dir_path_from_library_root);
+        for (id, resource) in epub.resources.clone() {
+            let resource_path = raw_dir.join(resource.path);
+            match resource_path.starts_with(&raw_dir) {
+                true => {
+                    let resource_path_parent = resource_path
+                        .parent()
+                        .expect("Unreachable: joined path is root.");
+                    create_dir_all(&resource_path_parent).expect(&format!(
+                        "Failed to create directory {}.",
+                        resource_path_parent.display()
+                    ));
+                    let resource_bytes = epub.get_resource(&id).expect("Internal error: EPUB library failed to get resource for id listed in its resources.").0;
+                    write(&resource_path, resource_bytes)
+                        .expect(&format!("Failed to write to {}.", resource_path.display()));
+                }
+                false => panic!(
+                    "Book contains resource {}, which is attempting a zip slip.",
+                    resource_path.display()
+                ),
+            }
+        }
+
+        let first_linear_spine_item_idref = &epub
+            .spine
+            .iter()
+            .find(|item| item.linear)
+            .expect("Ill-formed EPUB: no linear spine items.")
+            .idref;
+        let first_linear_spine_item_path = &epub
+            .resources
+            .get(first_linear_spine_item_idref)
+            .expect("Internal error: EPUB library failed to get resource for id listed in its spine.")
+            .path;
+
+        println!(
+            "Dumped raw contents of {} to {}.",
+            epub_path.display(),
+            raw_dir.display()
+        );
+
         Self {
-            id,
-            title,
-            // creators,
+            id: epub_id,
+            title: epub.get_title().expect("Ill-formed EPUB: no title."),
             path_from_library_root,
-            raw_rendition: None,
+            raw_rendition: LibraryBookRenditionInfo {
+                file_path_from_library_root: raw_dir_path_from_library_root
+                    .join(first_linear_spine_item_path),
+                dir_path_from_library_root: raw_dir_path_from_library_root,
+            },
         }
     }
 }
@@ -145,5 +173,26 @@ impl Library {
         }
 
         path_under_consideration
+    }
+
+    pub fn register_epub_and_get_id(&mut self, epub: &mut EpubDoc<BufReader<File>>, epub_path: &PathBuf) -> String {
+        let id = match epub.get_release_identifier() {
+            Some(id) => id,
+            None => epub
+                .unique_identifier
+                .as_ref()
+                .expect("Ill-formed EPUB: no unique identifier.")
+                .clone(),
+        };
+        if !self.books.iter().any(|book_info| book_info.id == id) {
+            let new_book_info = LibraryBookInfo::new_from_epub(self, epub, id.clone(), epub_path);
+            self.books.push(new_book_info);
+            self.write();
+        }
+        id
+    }
+
+    pub fn get_book_info(&self, id: &str) -> Option<&LibraryBookInfo> {
+        self.books.iter().find(|book_info| &book_info.id == id)
     }
 }

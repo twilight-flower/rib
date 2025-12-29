@@ -66,7 +66,7 @@ fn main() {
         .expect("Couldn't open cache: no home directory path found.");
 
     let library_path = project_dirs.data_local_dir().join("library");
-    let library = Library::open(library_path);
+    let mut library = Library::open(library_path);
 
     match args.subcommand {
         Some(subcommand) => match subcommand {
@@ -86,7 +86,7 @@ fn main() {
                     .expect_err("Internal error: failed to print help text.");
                 println!("{}", help_text.output);
             }
-            _ => open_books(&library, args.paths),
+            _ => open_books(&mut library, args.paths),
         },
     }
 }
