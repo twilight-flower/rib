@@ -1,29 +1,57 @@
+mod book;
 mod library;
 
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use argh::FromArgs;
 use directories::ProjectDirs;
-use epub::doc::EpubDoc;
 
-use crate::library::{Library, LibraryBookInfo};
+use crate::{book::open_books, library::Library};
 
 //////////////
 //   Args   //
 //////////////
 
 #[derive(Clone, Copy, Debug, FromArgs)]
-#[argh(subcommand)]
-enum Subcommand {} // Placeholder
+/// list books in library
+#[argh(subcommand, name = "list")]
+struct LibraryListArgs {}
 
+#[derive(Clone, Copy, Debug, FromArgs)]
+/// clear books from library
+#[argh(subcommand, name = "clear")]
+struct LibraryClearArgs {}
+
+#[derive(Clone, Copy, Debug, FromArgs)]
+#[argh(subcommand)]
+enum LibrarySubcommand {
+    List(LibraryListArgs),
+    Clear(LibraryClearArgs),
+}
+
+#[derive(Clone, Copy, Debug, FromArgs)]
+/// interact with rib's library of previously-opened books
+#[argh(subcommand, name = "library")]
+struct LibraryArgs {
+    #[argh(subcommand)]
+    subcommand: LibrarySubcommand,
+}
+
+#[derive(Clone, Copy, Debug, FromArgs)]
+#[argh(subcommand)]
+enum ArgsSubcommand {
+    Library(LibraryArgs),
+} // Placeholder
+
+// When updating to support non-EPUB input, adjust docstrings here accordingly
 #[derive(Clone, Debug, FromArgs)]
 /// Minimalist EPUB reader.
 struct Args {
     #[argh(subcommand)]
-    subcommand: Option<Subcommand>,
+    subcommand: Option<ArgsSubcommand>,
     #[argh(positional)]
-    /// epub path to open
-    path: PathBuf, // Maybe switch to vec to allow opening multiple epubs at once?
+    /// epub paths to open
+    paths: Vec<PathBuf>,
 }
 
 //////////////
@@ -39,9 +67,25 @@ fn main() {
     let library_path = project_dirs.data_local_dir().join("library");
     let library = Library::open(library_path);
 
-    // Once we've got support for multiple formats, do branching here.
-    let book = EpubDoc::new(&args.path).expect(&format!("Couldn't open {} as EPUB.", args.path.display()));
-
-    // EPUB-handling may work better in its own module rather than in main; but keep it here for now for simplicity
-    let book_info = LibraryBookInfo::from_epub(&library, &book);
+    match args.subcommand {
+        Some(subcommand) => match subcommand {
+            ArgsSubcommand::Library(library_args) => match library_args.subcommand {
+                LibrarySubcommand::Clear(_) => println!("Placeholder: library clear subcommand."),
+                LibrarySubcommand::List(_) => println!("Placeholder: library list subcommand."),
+            },
+        },
+        None => match args.paths.len() {
+            0 => {
+                // Print argh's help text and exit
+                let run_command = match std::env::args().next() {
+                    Some(command) => command,
+                    None => "rib".to_string(),
+                };
+                let help_text = Args::from_args(&[&run_command], &["help"])
+                    .expect_err("Internal error: failed to print help text.");
+                println!("{}", help_text.output);
+            }
+            _ => open_books(&library, args.paths),
+        },
+    }
 }
