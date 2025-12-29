@@ -1,17 +1,40 @@
 use std::{
-    fs::{create_dir_all, read_to_string, remove_dir_all, write},
-    path::PathBuf,
+    fs::{File, create_dir_all, read_to_string, remove_dir_all, write}, io::BufReader, path::PathBuf
 };
 
+use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LibraryBookMetadata {
+pub struct LibraryBookInfo {
     id: String,
     title: String,
     creators: Vec<String>,
     path_from_library_root: PathBuf,
     // bytes: u64
+}
+
+impl LibraryBookInfo {
+	pub fn from_epub(library: &Library, epub: &EpubDoc<BufReader<File>>) -> Self {
+		let id = match epub.get_release_identifier() {
+			Some(id) => id,
+			None => epub.unique_identifier.as_ref().expect("Ill-formed EPUB: no unique identifier.").clone(),
+		};
+		let title = epub.get_title().expect("Ill-formed EPUB: no title.");
+		let creators = epub.metadata.iter().filter_map(|metadata_item| {
+			match &metadata_item.property == "creator" {
+				true => Some(metadata_item.value.clone()),
+				false => None,
+			}
+		}).collect();
+		let path_from_library_root = library.get_internal_path_from_id(&id);
+		Self {
+			id,
+			title,
+			creators,
+			path_from_library_root,
+		}
+	}
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -21,7 +44,7 @@ pub struct Library {
     #[serde(skip)]
     index_path: PathBuf,
     #[serde(default)]
-    books: Vec<LibraryBookMetadata>,
+    books: Vec<LibraryBookInfo>,
     // max_books: Option<u64>,
     // max_bytes: Option<u64>,
 }
@@ -77,4 +100,17 @@ impl Library {
             }
         }
     }
+
+	fn get_internal_path_from_id(&self, id: &str) -> PathBuf {
+        let sanitized_id = sanitize_filename::sanitize(id);
+
+		let mut path_under_consideration = PathBuf::from(&sanitized_id);
+		let mut numeric_extension = 1;
+		while self.books.iter().any(|book| book.path_from_library_root == path_under_consideration && book.id != sanitized_id ) {
+			numeric_extension += 1;
+			path_under_consideration = PathBuf::from(format!("{sanitized_id}_{numeric_extension}"));
+		}
+
+		path_under_consideration
+	}
 }
