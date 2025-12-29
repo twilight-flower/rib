@@ -7,12 +7,35 @@ use std::{
 use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
 
+use crate::browser;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LibraryBookRenditionInfo {
+    pub dir_path_from_library_root: PathBuf,
+    pub file_path_from_library_root: PathBuf,
+}
+
+impl LibraryBookRenditionInfo {
+    pub fn open(&self, library_path: &PathBuf) {
+        let path_to_open = library_path
+            .join(&self.file_path_from_library_root)
+            .canonicalize()
+            .expect("Unable to canonicalize book rendition path to open.");
+        browser::open(&path_to_open);
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LibraryBookInfo {
+    // Identifiers
     pub id: String,
     pub title: String,
     // creators: Vec<String>,
+
+    // Library-management-relevant metadata
     pub path_from_library_root: PathBuf,
+    pub raw_rendition: Option<LibraryBookRenditionInfo>,
+    // pub renditions: Vec<LibraryBookRenditionInfo>,
     // raw_dump_hash: String,
     // bytes: u64
 }
@@ -40,6 +63,7 @@ impl LibraryBookInfo {
             title,
             // creators,
             path_from_library_root,
+            raw_rendition: None,
         }
     }
 }

@@ -1,7 +1,8 @@
 mod book;
+mod browser;
 mod library;
 
-use std::{env, path::PathBuf};
+use std::path::PathBuf;
 
 use argh::FromArgs;
 use directories::ProjectDirs;
