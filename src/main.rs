@@ -51,6 +51,9 @@ enum ArgsSubcommand {
 struct Args {
     #[argh(subcommand)]
     subcommand: Option<ArgsSubcommand>,
+    #[argh(option, short = 'b')]
+    /// browser to open book with (default: system default browser)
+    browser: Option<String>,
     #[argh(positional)]
     /// epub paths to open
     paths: Vec<PathBuf>,
@@ -92,7 +95,7 @@ fn main() {
                     .expect_err("Internal error: failed to print help text.");
                 println!("{}", help_text.output);
             }
-            _ => open_books(&mut library, args.paths),
+            _ => open_books(&mut library, args),
         },
     }
 }

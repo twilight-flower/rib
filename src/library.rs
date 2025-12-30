@@ -24,12 +24,12 @@ pub struct LibraryBookRenditionInfo {
 }
 
 impl LibraryBookRenditionInfo {
-    pub fn open_in_browser(&self, library_path: &PathBuf) {
+    pub fn open_in_browser(&self, library_path: &PathBuf, browser: &Option<String>) {
         let path_to_open = library_path
             .join(&self.file_path_from_library_root)
             .canonicalize() // To help cross-platform compatibility, hopefully
             .expect("Unable to canonicalize book rendition path to open.");
-        browser::open(&path_to_open);
+        browser::open(&path_to_open, browser);
     }
 }
 
@@ -233,12 +233,14 @@ impl Library {
         id
     }
 
-    pub fn open_raw(&mut self, id: &str) {
+    pub fn open_raw(&mut self, id: &str, browser: &Option<String>) {
         let book_info = self
             .books
             .get_mut(id)
             .expect(&format!("Couldn't open book id {id}: not found."));
-        book_info.raw_rendition.open_in_browser(&self.library_path);
+        book_info
+            .raw_rendition
+            .open_in_browser(&self.library_path, browser);
         book_info.last_opened_time = Utc::now();
         self.write();
     }
