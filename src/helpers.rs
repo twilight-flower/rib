@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::{de::Error, Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Deserializer, Serializer, de::Error};
 
 pub fn deserialize_datetime<'de, D: Deserializer<'de>>(
     deserializer: D,

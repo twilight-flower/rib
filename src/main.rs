@@ -3,9 +3,9 @@ mod browser;
 mod helpers;
 mod library;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use argh::FromArgs;
+use argh::{ArgsInfo, FromArgs};
 use directories::ProjectDirs;
 
 use crate::{book::open_books, library::Library};
@@ -14,24 +14,24 @@ use crate::{book::open_books, library::Library};
 //   Args   //
 //////////////
 
-#[derive(Clone, Copy, Debug, FromArgs)]
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 /// list books in library
 #[argh(subcommand, name = "list")]
 struct LibraryListArgs {}
 
-#[derive(Clone, Copy, Debug, FromArgs)]
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 /// clear books from library
 #[argh(subcommand, name = "clear")]
 struct LibraryClearArgs {}
 
-#[derive(Clone, Copy, Debug, FromArgs)]
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
 enum LibrarySubcommand {
     List(LibraryListArgs),
     Clear(LibraryClearArgs),
 }
 
-#[derive(Clone, Copy, Debug, FromArgs)]
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 /// interact with rib's library of previously-opened books
 #[argh(subcommand, name = "library")]
 struct LibraryArgs {
@@ -39,14 +39,14 @@ struct LibraryArgs {
     subcommand: LibrarySubcommand,
 }
 
-#[derive(Clone, Copy, Debug, FromArgs)]
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
 enum ArgsSubcommand {
     Library(LibraryArgs),
 } // Placeholder
 
 // When updating to support non-EPUB input, adjust docstrings here accordingly
-#[derive(Clone, Debug, FromArgs)]
+#[derive(Clone, Debug, FromArgs, ArgsInfo)]
 /// Minimalist EPUB reader.
 struct Args {
     #[argh(subcommand)]
@@ -79,11 +79,16 @@ fn main() {
         None => match args.paths.len() {
             0 => {
                 // Print argh's help text and exit
-                let run_command = match std::env::args().next() {
-                    Some(command) => command,
-                    None => "rib".to_string(),
-                };
-                let help_text = Args::from_args(&[&run_command], &["help"])
+                let first_arg = std::env::args().next();
+                let run_command = first_arg
+                    .as_ref()
+                    .and_then(|command_str| {
+                        Path::new(command_str)
+                            .file_name()
+                            .and_then(|executable_name| executable_name.to_str())
+                    })
+                    .unwrap_or("rib");
+                let help_text = Args::from_args(&[run_command], &["help"])
                     .expect_err("Internal error: failed to print help text.");
                 println!("{}", help_text.output);
             }

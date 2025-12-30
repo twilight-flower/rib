@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{create_dir_all, read_to_string, remove_dir_all, write, File},
+    fs::{File, create_dir_all, read_to_string, remove_dir_all, write},
     io::BufReader,
     path::PathBuf,
 };
@@ -144,15 +144,19 @@ impl Library {
 
     fn write(&self) {
         match create_dir_all(&self.library_path) {
-			Ok(_) => match serde_json::to_string_pretty(self) {
-				Ok(self_serialized) => match write(&self.index_path, self_serialized) {
-					Ok(_) => (),
-					Err(_) => println!("Warning: failed to write library index. Library may be cleared on next program run."),
-				}
-				Err(_) => println!("Warning: failed to serialize library index. Library may be cleared on next program run."),
-			}
-			Err(_) => println!("Warning: couldn't create library directory."),
-		}
+            Ok(_) => match serde_json::to_string_pretty(self) {
+                Ok(self_serialized) => match write(&self.index_path, self_serialized) {
+                    Ok(_) => (),
+                    Err(_) => println!(
+                        "Warning: failed to write library index. Library may be cleared on next program run."
+                    ),
+                },
+                Err(_) => println!(
+                    "Warning: failed to serialize library index. Library may be cleared on next program run."
+                ),
+            },
+            Err(_) => println!("Warning: couldn't create library directory."),
+        }
     }
 
     fn new(library_path: PathBuf, index_path: PathBuf) -> Self {
@@ -173,7 +177,9 @@ impl Library {
                     library_deserialized.with_paths(library_path, index_path)
                 }
                 Err(_) => {
-                    println!("Warning: library index is ill-formed. Clearing library and creating new library index."); // Add y/n prompt for this in case people need the cache for something?
+                    println!(
+                        "Warning: library index is ill-formed. Clearing library and creating new library index."
+                    ); // Add y/n prompt for this in case people need the cache for something?
                     remove_dir_all(&library_path).expect("Failed to clear library.");
                     Self::new(library_path, index_path)
                 }
