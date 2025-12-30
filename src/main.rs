@@ -1,5 +1,6 @@
 mod book;
 mod browser;
+mod helpers;
 mod library;
 
 use std::path::PathBuf;
