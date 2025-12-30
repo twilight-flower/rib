@@ -1,5 +1,51 @@
+use std::{
+    fs::{read_dir, symlink_metadata},
+    path::PathBuf,
+};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+////////////
+//   fs   //
+////////////
+
+pub fn get_dir_size(path: &PathBuf) -> u64 {
+    // Doesn't follow symlinks. Could be pretty easily modded to do so if useful later.
+    read_dir(path)
+        .expect(&format!("Couldn't read {} as directory.", path.display()))
+        .fold(0, |bytes, maybe_dir_entry| {
+            let dir_entry =
+                maybe_dir_entry.expect(&format!("Error viewing entry in {}", path.display()));
+            let dir_entry_path = dir_entry.path();
+            let dir_entry_metadata = symlink_metadata(&dir_entry_path).expect(&format!(
+                "Couldn't read metadata for {}.",
+                dir_entry_path.display()
+            ));
+            bytes
+                + match dir_entry_metadata.is_dir() {
+                    true => get_dir_size(&dir_entry_path),
+                    false => dir_entry_metadata.len(),
+                }
+        })
+}
+
+//////////////
+//   path   //
+//////////////
+
+pub fn make_pathbuf_separators_consistent(pathbuf_in: &PathBuf) -> PathBuf {
+    pathbuf_in
+        .components()
+        .fold(PathBuf::new(), |mut pathbuf_out, component| {
+            pathbuf_out.push(component);
+            pathbuf_out
+        })
+}
+
+///////////////
+//   serde   //
+///////////////
 
 pub fn deserialize_datetime<'de, D: Deserializer<'de>>(
     deserializer: D,

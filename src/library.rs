@@ -9,20 +9,25 @@ use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
 
-use crate::browser;
-use crate::helpers::{deserialize_datetime, serialize_datetime};
+use crate::{
+    browser,
+    helpers::{
+        deserialize_datetime, get_dir_size, make_pathbuf_separators_consistent, serialize_datetime,
+    },
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LibraryBookRenditionInfo {
     pub dir_path_from_library_root: PathBuf,
     pub file_path_from_library_root: PathBuf,
+    pub bytes: u64,
 }
 
 impl LibraryBookRenditionInfo {
     pub fn open_in_browser(&self, library_path: &PathBuf) {
         let path_to_open = library_path
             .join(&self.file_path_from_library_root)
-            .canonicalize()
+            .canonicalize() // To help cross-platform compatibility, hopefully
             .expect("Unable to canonicalize book rendition path to open.");
         browser::open(&path_to_open);
     }
@@ -46,7 +51,6 @@ pub struct LibraryBookInfo {
         serialize_with = "serialize_datetime"
     )]
     pub last_opened_time: DateTime<Utc>,
-    // bytes: u64
 
     // Renditions
     pub raw_rendition: LibraryBookRenditionInfo,
@@ -91,13 +95,13 @@ impl LibraryBookInfo {
             .find(|item| item.linear)
             .expect("Ill-formed EPUB: no linear spine items.")
             .idref;
-        let first_linear_spine_item_path = &epub
+        let first_linear_spine_item_path = make_pathbuf_separators_consistent(&epub
             .resources
             .get(first_linear_spine_item_idref)
             .expect(
                 "Internal error: EPUB library failed to get resource for id listed in its spine.",
             )
-            .path;
+            .path);
 
         println!(
             "Dumped raw contents of {} to {}.",
@@ -106,6 +110,7 @@ impl LibraryBookInfo {
         );
 
         let now = Utc::now();
+        let raw_rendition_dir_size = get_dir_size(&raw_dir);
         Self {
             id: epub_id,
             title: epub.get_title().expect("Ill-formed EPUB: no title."),
@@ -116,6 +121,7 @@ impl LibraryBookInfo {
                 file_path_from_library_root: raw_dir_path_from_library_root
                     .join(first_linear_spine_item_path),
                 dir_path_from_library_root: raw_dir_path_from_library_root,
+                bytes: raw_rendition_dir_size,
             },
         }
     }
