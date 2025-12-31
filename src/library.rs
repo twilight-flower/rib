@@ -341,4 +341,16 @@ impl Library {
             }
         }
     }
+
+    pub fn clear(
+        &mut self,
+        max_books: Option<usize>,
+        max_bytes: Option<u64>,
+        target_ids: &[String],
+    ) {
+        for id in target_ids {
+            self.remove_book(id);
+        }
+        self.truncate(max_books, max_bytes, &HashSet::new());
+    }
 }

@@ -15,24 +15,37 @@ use crate::{book::open_books, config::Config, library::Library};
 //   Args   //
 //////////////
 
+#[derive(Clone, Debug, FromArgs, ArgsInfo)]
+/// clear books from library
+#[argh(subcommand, name = "clear")]
+struct LibraryClearArgs {
+    #[argh(switch, short = 'a')]
+    /// clear all books from library
+    all: bool,
+    #[argh(option, short = 'b')]
+    /// clear books until no more than this many remain in the library
+    max_books: Option<usize>,
+    #[argh(option, short = 'B')]
+    /// clear books until library size is no more than this many bytes
+    max_bytes: Option<u64>,
+    #[argh(positional)]
+    /// clear books with these ids
+    ids: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 /// list books in library
 #[argh(subcommand, name = "list")]
 struct LibraryListArgs {}
 
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
-/// clear books from library
-#[argh(subcommand, name = "clear")]
-struct LibraryClearArgs {}
-
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
+#[derive(Clone, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
 enum LibrarySubcommand {
-    List(LibraryListArgs),
     Clear(LibraryClearArgs),
+    List(LibraryListArgs),
 }
 
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
+#[derive(Clone, Debug, FromArgs, ArgsInfo)]
 /// interact with rib's library of previously-opened books
 #[argh(subcommand, name = "library")]
 struct LibraryArgs {
@@ -40,7 +53,7 @@ struct LibraryArgs {
     subcommand: LibrarySubcommand,
 }
 
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
+#[derive(Clone, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
 enum ArgsSubcommand {
     Library(LibraryArgs),
@@ -79,7 +92,14 @@ fn main() {
     match args.subcommand {
         Some(subcommand) => match subcommand {
             ArgsSubcommand::Library(library_args) => match library_args.subcommand {
-                LibrarySubcommand::Clear(_) => println!("Placeholder: library clear subcommand."),
+                LibrarySubcommand::Clear(library_clear_args) => match library_clear_args.all {
+                    true => library.clear(Some(0), None, &[]),
+                    false => library.clear(
+                        library_clear_args.max_books,
+                        library_clear_args.max_bytes,
+                        &library_clear_args.ids,
+                    ),
+                },
                 LibrarySubcommand::List(_) => println!("Placeholder: library list subcommand."),
             },
         },
