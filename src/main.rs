@@ -100,7 +100,7 @@ fn main() {
                         &library_clear_args.ids,
                     ),
                 },
-                LibrarySubcommand::List(_) => println!("Placeholder: library list subcommand."),
+                LibrarySubcommand::List(_) => library.list(),
             },
         },
         None => match args.paths.len() {

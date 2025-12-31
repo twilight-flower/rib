@@ -6,6 +6,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
+use cli_table::{Cell, Table};
 use epub::doc::EpubDoc;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -270,6 +271,24 @@ impl Library {
     }
 
     // Manage library
+
+    pub fn list(&self) {
+        // Maybe give this more styling later; but it's good enough for now.
+        let table = self
+            .books
+            .iter()
+            .sorted_by_key(|(_id, book_info)| &book_info.title)
+            .map(|(id, book_info)| [id.cell(), (&book_info.title).cell()])
+            .collect_vec()
+            .table()
+            .title(["ID".cell(), "Title".cell()]);
+        println!(
+            "{}",
+            table
+                .display()
+                .expect("Couldn't display library list table.")
+        );
+    }
 
     fn size_in_bytes(&self) -> u64 {
         self.books.values().fold(0, |size_sum, book_info| {
