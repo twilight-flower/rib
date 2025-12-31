@@ -8,6 +8,7 @@ argh = "0.1.13"
 chrono = "0.4.42"
 directories = "6.0.0"
 epub = "2.1.5"
+itertools = "0.14.0"
 lazy_static = "1.5.0"
 sanitize-filename = "0.6.0"
 serde = {version = "1.0.228", features = ["derive"]}

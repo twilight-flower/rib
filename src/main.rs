@@ -105,7 +105,13 @@ fn main() {
                     (None, Some(config_browser)) => Some(config_browser),
                     (None, None) => None,
                 };
-                open_books(&mut library, args.paths, browser)
+                open_books(
+                    &mut library,
+                    args.paths,
+                    browser,
+                    config.max_library_books,
+                    config.max_library_bytes,
+                )
             }
         },
     }

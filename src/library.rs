@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{File, create_dir_all, read_to_string, remove_dir_all, write},
     io::BufReader,
     path::PathBuf,
@@ -7,6 +7,7 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -63,6 +64,7 @@ impl LibraryBookInfo {
         epub: &mut EpubDoc<BufReader<File>>,
         epub_id: String,
         epub_path: &PathBuf,
+        request_time: DateTime<Utc>,
     ) -> Self {
         let path_from_library_root = library.get_internal_path_from_id(&epub_id);
         let raw_dir_path_from_library_root = path_from_library_root.join("raw");
@@ -109,14 +111,13 @@ impl LibraryBookInfo {
             raw_dir.display()
         );
 
-        let now = Utc::now();
         let raw_rendition_dir_size = get_dir_size(&raw_dir);
         Self {
             id: epub_id,
             title: epub.get_title().expect("Ill-formed EPUB: no title."),
             path_from_library_root,
-            added_time: now,
-            last_opened_time: now,
+            added_time: request_time,
+            last_opened_time: request_time,
             raw_rendition: LibraryBookRenditionInfo {
                 file_path_from_library_root: raw_dir_path_from_library_root
                     .join(first_linear_spine_item_path),
@@ -124,6 +125,11 @@ impl LibraryBookInfo {
                 bytes: raw_rendition_dir_size,
             },
         }
+    }
+
+    fn size_in_bytes(&self) -> u64 {
+        // Will need to be complexified once we add support for non-raw renditions
+        self.raw_rendition.bytes
     }
 }
 
@@ -140,6 +146,8 @@ pub struct Library {
 }
 
 impl Library {
+    // Open library
+
     fn with_paths(self, library_path: PathBuf, index_path: PathBuf) -> Self {
         Self {
             library_path,
@@ -205,6 +213,8 @@ impl Library {
         }
     }
 
+    // Open books
+
     fn get_internal_path_from_id(&self, id: &str) -> PathBuf {
         let sanitized_id = sanitize_filename::sanitize(id);
 
@@ -224,6 +234,7 @@ impl Library {
         &mut self,
         epub: &mut EpubDoc<BufReader<File>>,
         epub_path: &PathBuf,
+        request_time: DateTime<Utc>,
     ) -> String {
         let id = match epub.get_release_identifier() {
             Some(id) => id,
@@ -234,22 +245,100 @@ impl Library {
                 .clone(),
         };
         if !self.books.contains_key(&id) {
-            let new_book_info = LibraryBookInfo::new_from_epub(self, epub, id.clone(), epub_path);
+            let new_book_info =
+                LibraryBookInfo::new_from_epub(self, epub, id.clone(), epub_path, request_time);
             self.books.insert(id.clone(), new_book_info);
             self.write();
         }
         id
     }
 
-    pub fn open_book_raw(&mut self, id: &str, browser: &Option<String>) {
-        let book_info = self
-            .books
-            .get_mut(id)
-            .expect(&format!("Couldn't open book id {id}: not found."));
+    pub fn open_book_raw(
+        &mut self,
+        id: &str,
+        request_time: DateTime<Utc>,
+        browser: &Option<String>,
+    ) {
+        let book_info = self.books.get_mut(id).expect(&format!(
+            "Couldn't open book id {id}: not found in library index."
+        ));
         book_info
             .raw_rendition
             .open_in_browser(&self.library_path, browser);
-        book_info.last_opened_time = Utc::now();
+        book_info.last_opened_time = request_time;
         self.write();
+    }
+
+    // Manage library
+
+    fn size_in_bytes(&self) -> u64 {
+        self.books.values().fold(0, |size_sum, book_info| {
+            size_sum + book_info.size_in_bytes()
+        })
+    }
+
+    fn is_oversized(&self, max_books: Option<usize>, max_bytes: Option<u64>) -> bool {
+        let too_many_books =
+            max_books.is_some_and(|max_books_unwrapped| self.books.len() > max_books_unwrapped);
+        let too_many_bytes =
+            max_bytes.is_some_and(|max_bytes_unwrapped| self.size_in_bytes() > max_bytes_unwrapped);
+        too_many_books || too_many_bytes
+    }
+
+    fn remove_book(&mut self, id: &str) {
+        let book_info = self.books.remove(id).expect(&format!(
+            "Couldn't remove book id {id}: not found in library index."
+        ));
+        let book_dir = self.library_path.join(&book_info.path_from_library_root);
+        if book_dir.is_dir() {
+            remove_dir_all(&book_dir).expect(&format!(
+                "Failed to remove {} from {}.",
+                book_info.title,
+                book_dir.display()
+            ));
+        } // If it exists but isn't a dir, maybe have handling for that to avoid later messes?
+        println!("Removed {} from {}.", book_info.title, book_dir.display());
+    }
+
+    pub fn truncate(
+        &mut self,
+        max_books: Option<usize>,
+        max_bytes: Option<u64>,
+        ids_to_exclude: &HashSet<String>,
+    ) {
+        let mut oversized = self.is_oversized(max_books, max_bytes);
+        if oversized {
+            let mut write_needed = false;
+
+            let mut ids_to_potentially_remove = self
+                .books
+                .iter()
+                .filter(|(id, _book_info)| !ids_to_exclude.contains(*id))
+                .sorted_unstable_by(
+                    |(_id_1, book_info_1), (_id_2, book_info_2)| match book_info_1
+                        .last_opened_time
+                        .cmp(&book_info_2.last_opened_time)
+                    {
+                        std::cmp::Ordering::Equal => book_info_2
+                            .size_in_bytes()
+                            .cmp(&book_info_1.size_in_bytes()),
+                        nonequal_datetime_ordering => nonequal_datetime_ordering,
+                    },
+                )
+                .map(|(id, _book_info)| id)
+                .rev()
+                .cloned()
+                .collect_vec();
+
+            while oversized && let Some(id) = ids_to_potentially_remove.pop() {
+                self.remove_book(&id);
+                write_needed = true;
+                oversized = self.is_oversized(max_books, max_bytes);
+            }
+
+            if write_needed {
+                self.write();
+            }
+        }
     }
 }

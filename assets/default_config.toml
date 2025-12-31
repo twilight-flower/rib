@@ -10,7 +10,7 @@
 ### impossible to open. Set either of these values to 0 to always clear all
 ### previously-opened books when opening any new ones.
 
-# max_library_books = 50
-# max_library_bytes = 1_000_000_000 # 1 GB
+# max_library_books = 100
+max_library_bytes = 1_000_000_000 # 1 GB
 
 ### TODO: stylesheets
