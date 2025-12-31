@@ -367,8 +367,11 @@ impl Library {
         max_bytes: Option<u64>,
         target_ids: &[String],
     ) {
-        for id in target_ids {
-            self.remove_book(id);
+        if !target_ids.is_empty() {
+            for id in target_ids {
+                self.remove_book(id);
+            }
+            self.write();
         }
         self.truncate(max_books, max_bytes, &HashSet::new());
     }
