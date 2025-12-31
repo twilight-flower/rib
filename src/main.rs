@@ -1,5 +1,6 @@
 mod book;
 mod browser;
+mod config;
 mod helpers;
 mod library;
 
@@ -8,7 +9,7 @@ use std::path::{Path, PathBuf};
 use argh::{ArgsInfo, FromArgs};
 use directories::ProjectDirs;
 
-use crate::{book::open_books, library::Library};
+use crate::{book::open_books, config::Config, library::Library};
 
 //////////////
 //   Args   //
@@ -67,7 +68,10 @@ fn main() {
     let args: Args = argh::from_env();
 
     let project_dirs = ProjectDirs::from("", "", "rib")
-        .expect("Couldn't open cache: no home directory path found.");
+        .expect("Couldn't open library: no home directory path found.");
+
+    let config_path = project_dirs.config_dir().join("config.toml");
+    let config = Config::open(config_path);
 
     let library_path = project_dirs.data_local_dir().join("library");
     let mut library = Library::open(library_path);
@@ -95,7 +99,14 @@ fn main() {
                     .expect_err("Internal error: failed to print help text.");
                 println!("{}", help_text.output);
             }
-            _ => open_books(&mut library, args),
+            _ => {
+                let browser = match (args.browser, config.default_browser) {
+                    (Some(args_browser), _) => Some(args_browser),
+                    (None, Some(config_browser)) => Some(config_browser),
+                    (None, None) => None,
+                };
+                open_books(&mut library, args.paths, browser)
+            }
         },
     }
 }

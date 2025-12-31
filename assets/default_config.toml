@@ -1,0 +1,16 @@
+### Uncomment this to define what program rib defaults to opening your book
+### sections in. (If undefined, your system default web browser will be used.)
+
+# default_browser = "firefox"
+
+### The least-recently-opened cached book will be purged when at least one of
+### these limits is reached. If the set of books opened in a single program-
+### invocation is larger than the maximums set here, the set will remain in the
+### library until rib's next run, to avoid making any book or set of books
+### impossible to open. Set either of these values to 0 to always clear all
+### previously-opened books when opening any new ones.
+
+# max_library_books = 50
+# max_library_bytes = 1_000_000_000 # 1 GB
+
+### TODO: stylesheets

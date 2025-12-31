@@ -21,7 +21,7 @@ pub fn open(path: &PathBuf, browser: &Option<String>) {
     };
 
     Command::new(launch_command)
-        .arg(&path)
-        .output()
+        .arg(path)
+        .spawn()
         .expect(&format!("Failed to open {} in browser.", path.display()));
 }

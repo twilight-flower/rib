@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     browser,
     helpers::{
-        deserialize_datetime, get_dir_size, make_pathbuf_separators_consistent, serialize_datetime,
+        deserialize_datetime, get_dir_size, serialize_datetime, standardize_pathbuf_separators,
     },
 };
 
@@ -95,7 +95,7 @@ impl LibraryBookInfo {
             .find(|item| item.linear)
             .expect("Ill-formed EPUB: no linear spine items.")
             .idref;
-        let first_linear_spine_item_path = make_pathbuf_separators_consistent(&epub
+        let first_linear_spine_item_path = standardize_pathbuf_separators(&epub
             .resources
             .get(first_linear_spine_item_idref)
             .expect(
@@ -154,14 +154,18 @@ impl Library {
                 Ok(self_serialized) => match write(&self.index_path, self_serialized) {
                     Ok(_) => (),
                     Err(_) => println!(
-                        "Warning: failed to write library index. Library may be cleared on next program run."
+                        "Warning: failed to write library index to {}. Library index may be nonexistent or ill-formed on next program run.",
+                        self.index_path.display()
                     ),
                 },
                 Err(_) => println!(
-                    "Warning: failed to serialize library index. Library may be cleared on next program run."
+                    "Warning: failed to serialize library index. Library index may be nonexistent or ill-formed on next program run."
                 ),
             },
-            Err(_) => println!("Warning: couldn't create library directory."),
+            Err(_) => println!(
+                "Warning: couldn't create library directory {}.",
+                self.library_path.display()
+            ),
         }
     }
 
@@ -175,24 +179,28 @@ impl Library {
         new_cache
     }
 
-    pub fn open(library_path: PathBuf) -> Self {
-        let index_path = library_path.join("library_index.json");
+    pub fn open(library_dir_path: PathBuf) -> Self {
+        let index_path = library_dir_path.join("library_index.json");
         match read_to_string(&index_path) {
             Ok(index_string) => match serde_json::from_str::<Self>(&index_string) {
                 Ok(library_deserialized) => {
-                    library_deserialized.with_paths(library_path, index_path)
+                    library_deserialized.with_paths(library_dir_path, index_path)
                 }
                 Err(_) => {
                     println!(
-                        "Warning: library index is ill-formed. Clearing library and creating new library index."
+                        "Warning: library index at {} is ill-formed. Clearing library and creating new library index.",
+                        index_path.display()
                     ); // Add y/n prompt for this in case people need the cache for something?
-                    remove_dir_all(&library_path).expect("Failed to clear library.");
-                    Self::new(library_path, index_path)
+                    remove_dir_all(&library_dir_path).expect("Failed to clear library.");
+                    Self::new(library_dir_path, index_path)
                 }
             },
             Err(_) => {
-                println!("Couldn't read library index. Creating new library index.");
-                Self::new(library_path, index_path)
+                println!(
+                    "Couldn't read library index at {}. Creating new library index.",
+                    index_path.display()
+                );
+                Self::new(library_dir_path, index_path)
             }
         }
     }
@@ -233,7 +241,7 @@ impl Library {
         id
     }
 
-    pub fn open_raw(&mut self, id: &str, browser: &Option<String>) {
+    pub fn open_book_raw(&mut self, id: &str, browser: &Option<String>) {
         let book_info = self
             .books
             .get_mut(id)

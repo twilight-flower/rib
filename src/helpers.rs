@@ -34,7 +34,7 @@ pub fn get_dir_size(path: &PathBuf) -> u64 {
 //   path   //
 //////////////
 
-pub fn make_pathbuf_separators_consistent(pathbuf_in: &PathBuf) -> PathBuf {
+pub fn standardize_pathbuf_separators(pathbuf_in: &PathBuf) -> PathBuf {
     pathbuf_in
         .components()
         .fold(PathBuf::new(), |mut pathbuf_out, component| {
