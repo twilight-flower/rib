@@ -23,20 +23,22 @@ struct LibraryClearArgs {
     /// clear all books from library
     all: bool,
     #[argh(option, short = 'b')]
-    /// clear books until no more than this many remain in the library
+    /// integer; clear books until no more than this many remain in the library
     max_books: Option<usize>,
     #[argh(option, short = 'B')]
-    /// clear books until library size is no more than this many bytes
+    /// integer; clear books until library size is no more than this many bytes
     max_bytes: Option<u64>,
     #[argh(positional)]
-    /// clear books with these ids
+    /// ids of books to clear even if they're otherwise within any specified library size limits
     ids: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 /// list books in library
 #[argh(subcommand, name = "list")]
-struct LibraryListArgs {}
+struct LibraryListArgs {
+    // Empty for now; later on, add option for a more machine-readable output, and maybe store more metadata in the library so the machines and/or nonmachines can filter on more information
+}
 
 #[derive(Clone, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
@@ -66,7 +68,7 @@ struct Args {
     #[argh(subcommand)]
     subcommand: Option<ArgsSubcommand>,
     #[argh(option, short = 'b')]
-    /// browser to open book with (default: system default browser)
+    /// command to open book with (default: system default web browser)
     browser: Option<String>,
     #[argh(positional)]
     /// epub paths to open
