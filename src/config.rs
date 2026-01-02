@@ -76,3 +76,13 @@ impl Config {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_is_valid() {
+        Config::default();
+    }
+}
