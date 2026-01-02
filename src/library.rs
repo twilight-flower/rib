@@ -11,155 +11,12 @@ use epub::doc::EpubDoc;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    browser,
-    helpers::{
-        deserialize_datetime, get_dir_size, serialize_datetime, standardize_pathbuf_separators,
-    },
-};
+use crate::epub::EpubInfo;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LibraryBookSpineItem {
-    pub path: PathBuf,
-    pub linear: bool,
-    // properties can go here later, but ignore them for now
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LibraryBookRenditionInfo {
-    pub dir_path_from_library_root: PathBuf,
-    pub default_file_path_from_library_root: PathBuf,
-    pub bytes: u64,
-}
-
-impl LibraryBookRenditionInfo {
-    pub fn open_in_browser(&self, library_path: &PathBuf, browser: &Option<String>) {
-        let path_to_canonicalize = library_path.join(&self.default_file_path_from_library_root);
-        let path_to_open = path_to_canonicalize
-            .canonicalize() // To help cross-platform compatibility, hopefully
-            .expect(&format!(
-                "Unable to canonicalize book rendition path {} to open.",
-                path_to_canonicalize.display()
-            ));
-        browser::open(&path_to_open, browser);
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LibraryBookInfo {
-    // Identifiers
-    pub id: String,
-    pub title: String,
-
-    // Library-management-relevant metadata
-    pub path_from_library_root: PathBuf,
-    #[serde(
-        deserialize_with = "deserialize_datetime",
-        serialize_with = "serialize_datetime"
-    )]
-    pub added_time: DateTime<Utc>,
-    #[serde(
-        deserialize_with = "deserialize_datetime",
-        serialize_with = "serialize_datetime"
-    )]
-    pub last_opened_time: DateTime<Utc>,
-
-    // Contents
-    pub raw_spine_items: Vec<LibraryBookSpineItem>,
-    pub raw_nonspine_resource_paths: Vec<PathBuf>,
-
-    // Renditions
-    pub raw_rendition: LibraryBookRenditionInfo,
-    // pub renditions: Vec<LibraryBookRenditionInfo>,
-}
-
-impl LibraryBookInfo {
-    fn new_from_epub(
-        library: &mut Library,
-        epub: &mut EpubDoc<BufReader<File>>,
-        epub_id: String,
-        epub_path: &PathBuf,
-        request_time: DateTime<Utc>,
-    ) -> Self {
-        let path_from_library_root = library.get_internal_path_from_id(&epub_id);
-        let raw_dir_path_from_library_root = path_from_library_root.join("raw");
-        let raw_dir = library.library_path.join(&raw_dir_path_from_library_root);
-
-        for (id, resource) in epub.resources.clone() {
-            let resource_path = raw_dir.join(resource.path);
-            match resource_path.starts_with(&raw_dir) {
-                true => {
-                    let resource_path_parent = resource_path
-                        .parent()
-                        .expect("Unreachable: joined path is root.");
-                    create_dir_all(&resource_path_parent).expect(&format!(
-                        "Failed to create directory {}.",
-                        resource_path_parent.display()
-                    ));
-                    let resource_bytes = epub.get_resource(&id).expect("Internal error: EPUB library failed to get resource for id listed in its resources.").0;
-                    write(&resource_path, resource_bytes)
-                        .expect(&format!("Failed to write to {}.", resource_path.display()));
-                }
-                false => panic!(
-                    "Book contains resource {}, which is attempting a zip slip.",
-                    resource_path.display()
-                ),
-            }
-        }
-
-        println!(
-            "Dumped raw contents of {} to {}.",
-            epub_path.display(),
-            raw_dir.display()
-        );
-
-        let raw_spine_items = epub.spine.iter().map(|spine_item| LibraryBookSpineItem {
-            path: standardize_pathbuf_separators(&raw_dir_path_from_library_root.join(&epub.resources.get(&spine_item.idref).expect("Internal error: EPUB library failed to get resource for id listed in its spine.").path)),
-            linear: spine_item.linear,
-        }).collect_vec();
-        let raw_nonspine_resource_paths = epub
-            .resources
-            .values()
-            .filter_map(|resource| {
-                let resource_path = raw_dir_path_from_library_root.join(&resource.path);
-                match raw_spine_items
-                    .iter()
-                    .any(|spine_item| spine_item.path == resource_path)
-                {
-                    true => None,
-                    false => Some(standardize_pathbuf_separators(&resource_path)),
-                }
-            })
-            .collect_vec();
-
-        let first_linear_raw_spine_item_path = standardize_pathbuf_separators(
-            &raw_spine_items
-                .iter()
-                .find(|item| item.linear)
-                .expect("Ill-formed EPUB: no linear spine items.")
-                .path,
-        );
-
-        Self {
-            id: epub_id,
-            title: epub.get_title().expect("Ill-formed EPUB: no title."),
-            path_from_library_root,
-            added_time: request_time,
-            last_opened_time: request_time,
-            raw_spine_items,
-            raw_nonspine_resource_paths,
-            raw_rendition: LibraryBookRenditionInfo {
-                default_file_path_from_library_root: first_linear_raw_spine_item_path,
-                dir_path_from_library_root: raw_dir_path_from_library_root,
-                bytes: get_dir_size(&raw_dir),
-            },
-        }
-    }
-
-    fn size_in_bytes(&self) -> u64 {
-        // Will need to be complexified once we add support for non-raw renditions
-        self.raw_rendition.bytes
-    }
+enum LibraryBookInfo {
+    // Might be nice to implement a trait for all book-info types once there's more than one, for API-consistency
+    Epub(EpubInfo),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -244,14 +101,19 @@ impl Library {
 
     // Open books
 
-    fn get_internal_path_from_id(&self, id: &str) -> PathBuf {
+    pub fn get_internal_path_from_id(&self, id: &str) -> PathBuf {
         let sanitized_id = sanitize_filename::sanitize(id);
 
         let mut path_under_consideration = PathBuf::from(&sanitized_id);
         let mut numeric_extension = 1;
-        while self.books.iter().any(|(book_id, book_info)| {
-            book_info.path_from_library_root == path_under_consideration && book_id != &sanitized_id
-        }) {
+        while self
+            .books
+            .iter()
+            .any(|(book_id, LibraryBookInfo::Epub(epub_info))| {
+                epub_info.path_from_library_root == path_under_consideration
+                    && book_id != &sanitized_id
+            })
+        {
             numeric_extension += 1;
             path_under_consideration = PathBuf::from(format!("{sanitized_id}_{numeric_extension}"));
         }
@@ -274,9 +136,10 @@ impl Library {
                 .clone(),
         };
         if !self.books.contains_key(&id) {
-            let new_book_info =
-                LibraryBookInfo::new_from_epub(self, epub, id.clone(), epub_path, request_time);
-            self.books.insert(id.clone(), new_book_info);
+            let new_epub_info =
+                EpubInfo::new_from_epub(self, epub, id.clone(), epub_path, request_time);
+            self.books
+                .insert(id.clone(), LibraryBookInfo::Epub(new_epub_info));
             self.write();
         }
         id
@@ -288,13 +151,13 @@ impl Library {
         request_time: DateTime<Utc>,
         browser: &Option<String>,
     ) {
-        let book_info = self.books.get_mut(id).expect(&format!(
+        let LibraryBookInfo::Epub(epub_info) = self.books.get_mut(id).expect(&format!(
             "Couldn't open book id {id}: not found in library index."
         ));
-        book_info
+        epub_info
             .raw_rendition
             .open_in_browser(&self.library_path, browser);
-        book_info.last_opened_time = request_time;
+        epub_info.last_opened_time = request_time;
         self.write();
     }
 
@@ -305,8 +168,8 @@ impl Library {
         let table = self
             .books
             .iter()
-            .sorted_by_key(|(_id, book_info)| &book_info.title)
-            .map(|(id, book_info)| [id.cell(), (&book_info.title).cell()])
+            .sorted_by_key(|(_id, LibraryBookInfo::Epub(epub_info))| &epub_info.title)
+            .map(|(id, LibraryBookInfo::Epub(epub_info))| [id.cell(), (&epub_info.title).cell()])
             .collect_vec()
             .table()
             .title(["ID".cell(), "Title".cell()]);
@@ -319,9 +182,11 @@ impl Library {
     }
 
     fn size_in_bytes(&self) -> u64 {
-        self.books.values().fold(0, |size_sum, book_info| {
-            size_sum + book_info.size_in_bytes()
-        })
+        self.books
+            .values()
+            .fold(0, |size_sum, LibraryBookInfo::Epub(epub_info)| {
+                size_sum + epub_info.size_in_bytes()
+            })
     }
 
     fn is_oversized(&self, max_books: Option<usize>, max_bytes: Option<u64>) -> bool {
@@ -333,18 +198,18 @@ impl Library {
     }
 
     fn remove_book(&mut self, id: &str) {
-        let book_info = self.books.remove(id).expect(&format!(
+        let LibraryBookInfo::Epub(epub_info) = self.books.remove(id).expect(&format!(
             "Couldn't remove book id {id}: not found in library index."
         ));
-        let book_dir = self.library_path.join(&book_info.path_from_library_root);
+        let book_dir = self.library_path.join(&epub_info.path_from_library_root);
         if book_dir.is_dir() {
             remove_dir_all(&book_dir).expect(&format!(
                 "Failed to remove {} from {}.",
-                book_info.title,
+                epub_info.title,
                 book_dir.display()
             ));
         } // If it exists but isn't a dir, maybe have handling for that to avoid later messes?
-        println!("Removed {} from {}.", book_info.title, book_dir.display());
+        println!("Removed {} from {}.", epub_info.title, book_dir.display());
     }
 
     pub fn truncate(
@@ -362,14 +227,17 @@ impl Library {
                 .iter()
                 .filter(|(id, _book_info)| !ids_to_exclude.contains(*id))
                 .sorted_unstable_by(
-                    |(_id_1, book_info_1), (_id_2, book_info_2)| match book_info_1
-                        .last_opened_time
-                        .cmp(&book_info_2.last_opened_time)
-                    {
-                        std::cmp::Ordering::Equal => book_info_2
-                            .size_in_bytes()
-                            .cmp(&book_info_1.size_in_bytes()),
-                        nonequal_datetime_ordering => nonequal_datetime_ordering,
+                    |(_id_1, LibraryBookInfo::Epub(epub_info_1)),
+                     (_id_2, LibraryBookInfo::Epub(epub_info_2))| {
+                        match epub_info_1
+                            .last_opened_time
+                            .cmp(&epub_info_2.last_opened_time)
+                        {
+                            std::cmp::Ordering::Equal => epub_info_2
+                                .size_in_bytes()
+                                .cmp(&epub_info_1.size_in_bytes()),
+                            nonequal_datetime_ordering => nonequal_datetime_ordering,
+                        }
                     },
                 )
                 .map(|(id, _book_info)| id)

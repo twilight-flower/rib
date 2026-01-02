@@ -1,6 +1,7 @@
 mod book;
 mod browser;
 mod config;
+mod epub;
 mod helpers;
 mod library;
 
