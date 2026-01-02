@@ -4,13 +4,14 @@ mod config;
 mod epub;
 mod helpers;
 mod library;
+mod style;
 
 use std::path::{Path, PathBuf};
 
 use argh::{ArgsInfo, FromArgs};
 use directories::ProjectDirs;
 
-use crate::{book::open_books, config::Config, library::Library};
+use crate::{book::open_books, config::Config, library::Library, style::Style};
 
 //////////////
 //   Args   //
@@ -68,12 +69,15 @@ enum ArgsSubcommand {
 struct Args {
     #[argh(subcommand)]
     subcommand: Option<ArgsSubcommand>,
-    #[argh(option, short = 'b')]
-    /// command to open book with (default: system default web browser)
-    browser: Option<String>,
     #[argh(positional)]
     /// epub paths to open
     paths: Vec<PathBuf>,
+    #[argh(option, short = 'b')]
+    /// command to open book with (default: system default web browser)
+    browser: Option<String>,
+    #[argh(switch, short = 'r')]
+    /// open raw book without index or stylesheets
+    raw: bool,
 }
 
 //////////////
@@ -87,7 +91,7 @@ fn main() {
         .expect("Couldn't open library: no home directory path found.");
 
     let config_path = project_dirs.config_dir().join("config.toml");
-    let config = Config::open(config_path);
+    let config = Config::open(&config_path);
 
     let library_path = project_dirs.data_local_dir().join("library");
     let mut library = Library::open(library_path);
@@ -128,10 +132,16 @@ fn main() {
                     (None, Some(config_browser)) => Some(config_browser),
                     (None, None) => None,
                 };
+                let styles = match args.raw {
+                    // Once we want user-specified styling support we'll need more here. Make sure the vec is always nonempty: if the user runs the specify-style flag and then specifies empty-set-of-styles, use default as if it's unspecified
+                    true => vec![Style::raw()],
+                    false => vec![Style::default()],
+                };
                 open_books(
                     &mut library,
                     args.paths,
                     browser,
+                    styles,
                     config.max_library_books,
                     config.max_library_bytes,
                 )

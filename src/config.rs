@@ -1,6 +1,6 @@
 use std::{
     fs::{create_dir_all, read_to_string, write},
-    path::PathBuf,
+    path::Path,
 };
 
 use lazy_static::lazy_static;
@@ -30,7 +30,7 @@ impl Default for Config {
 impl Config {
     const DEFAULT_STRING: &'static str = include_str!("../assets/default_config.toml");
 
-    fn write_default(config_file_path: &PathBuf) {
+    fn write_default(config_file_path: &Path) {
         let config_file_parent_path = config_file_path
             .parent()
             .expect("Internal error: tried to write default config file to root.");
@@ -49,8 +49,8 @@ impl Config {
         }
     }
 
-    pub fn open(config_file_path: PathBuf) -> Self {
-        match read_to_string(&config_file_path) {
+    pub fn open(config_file_path: &Path) -> Self {
+        match read_to_string(config_file_path) {
             Ok(config_string) => match toml::from_str(&config_string) {
                 Ok(config) => config,
                 Err(_) => {
@@ -67,7 +67,7 @@ impl Config {
                     "Couldn't read config file at {}. Attempting to create default config file.",
                     config_file_path.display()
                 );
-                Self::write_default(&config_file_path);
+                Self::write_default(config_file_path);
                 Self::default()
             }
         }

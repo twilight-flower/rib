@@ -1,6 +1,6 @@
 use std::{
-    fs::{read_dir, symlink_metadata},
-    path::PathBuf,
+    fs::{hard_link, read_dir, symlink_metadata},
+    path::{Path, PathBuf},
 };
 
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer, Serializer, de::Error};
 //   fs   //
 ////////////
 
-pub fn get_dir_size(path: &PathBuf) -> u64 {
+pub fn get_dir_size(path: &Path) -> u64 {
     // Doesn't follow symlinks. Could be pretty easily modded to do so if useful later.
     read_dir(path)
         .expect(&format!("Couldn't read {} as directory.", path.display()))
@@ -34,7 +34,7 @@ pub fn get_dir_size(path: &PathBuf) -> u64 {
 //   path   //
 //////////////
 
-pub fn standardize_pathbuf_separators(pathbuf_in: &PathBuf) -> PathBuf {
+pub fn standardize_pathbuf_separators(pathbuf_in: &Path) -> PathBuf {
     pathbuf_in
         .components()
         .fold(PathBuf::new(), |mut pathbuf_out, component| {
@@ -62,4 +62,27 @@ pub fn serialize_datetime<S: Serializer>(
 ) -> Result<S::Ok, S::Error> {
     let datetime_string = datetime.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true);
     serializer.serialize_str(&datetime_string)
+}
+
+/////////////////
+//   linking   //
+/////////////////
+
+pub fn create_link(source: &Path, destination: &Path) {
+    #[cfg(windows)]
+    hard_link(destination, source).expect(&format!(
+        "Failed to link {} to {}.",
+        source.display(),
+        destination.display()
+    ));
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(destination, source);
+
+    #[cfg(not(any(windows, unix)))]
+    panic!(
+        "Unable to link {} to {}: unsupported OS.",
+        source.display(),
+        destination.display()
+    );
 }

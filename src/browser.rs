@@ -1,6 +1,6 @@
-use std::{path::PathBuf, process::Command};
+use std::{path::Path, process::Command};
 
-pub fn open(path: &PathBuf, browser: &Option<String>) {
+pub fn open(path: &Path, browser: &Option<String>) {
     let launch_command = match browser {
         Some(browser_command) => browser_command,
         None => {

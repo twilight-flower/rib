@@ -1,12 +1,13 @@
 use std::{
     fs::{File, create_dir_all, write},
     io::BufReader,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -15,24 +16,26 @@ use crate::{
         deserialize_datetime, get_dir_size, serialize_datetime, standardize_pathbuf_separators,
     },
     library::Library,
+    style::Style,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EpubSpineItem {
-    pub path: PathBuf,
+    pub path_from_rendition_root: PathBuf,
     pub linear: bool,
     // properties can go here later, but ignore them for now
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EpubRenditionInfo {
+    pub style: Style,
     pub dir_path_from_library_root: PathBuf,
     pub default_file_path_from_library_root: PathBuf,
     pub bytes: u64,
 }
 
 impl EpubRenditionInfo {
-    pub fn open_in_browser(&self, library_path: &PathBuf, browser: &Option<String>) {
+    pub fn open_in_browser(&self, library_path: &Path, browser: &Option<String>) {
         let path_to_canonicalize = library_path.join(&self.default_file_path_from_library_root);
         let path_to_open = path_to_canonicalize
             .canonicalize() // To help cross-platform compatibility, hopefully
@@ -49,6 +52,9 @@ pub struct EpubInfo {
     // Identifiers
     pub id: String,
     pub title: String,
+
+    // Display-relevant metadata
+    pub creators: Vec<String>,
 
     // Library-management-relevant metadata
     pub path_from_library_root: PathBuf,
@@ -69,7 +75,7 @@ pub struct EpubInfo {
 
     // Renditions
     pub raw_rendition: EpubRenditionInfo,
-    // pub renditions: Vec<LibraryBookRenditionInfo>,
+    pub nonraw_renditions: Vec<EpubRenditionInfo>, // Maybe change to hashset to improve worst-case perf?
 }
 
 impl EpubInfo {
@@ -77,16 +83,16 @@ impl EpubInfo {
         library: &mut Library,
         epub: &mut EpubDoc<BufReader<File>>,
         epub_id: String,
-        epub_path: &PathBuf,
+        epub_path: &Path,
         request_time: DateTime<Utc>,
     ) -> Self {
         let path_from_library_root = library.get_internal_path_from_id(&epub_id);
         let raw_dir_path_from_library_root = path_from_library_root.join("raw");
-        let raw_dir = library.library_path.join(&raw_dir_path_from_library_root);
+        let raw_dir_path = library.library_path.join(&raw_dir_path_from_library_root);
 
         for (id, resource) in epub.resources.clone() {
-            let resource_path = raw_dir.join(resource.path);
-            match resource_path.starts_with(&raw_dir) {
+            let resource_path = raw_dir_path.join(resource.path);
+            match resource_path.starts_with(&raw_dir_path) {
                 true => {
                     let resource_path_parent = resource_path
                         .parent()
@@ -109,24 +115,33 @@ impl EpubInfo {
         println!(
             "Dumped raw contents of {} to {}.",
             epub_path.display(),
-            raw_dir.display()
+            raw_dir_path.display()
         );
 
+        let creators = epub
+            .metadata
+            .iter()
+            .filter_map(|metadata_item| match &metadata_item.property == "creator" {
+                true => Some(metadata_item.value.clone()),
+                false => None,
+            })
+            .collect();
+
         let raw_spine_items = epub.spine.iter().map(|spine_item| EpubSpineItem {
-            path: standardize_pathbuf_separators(&raw_dir_path_from_library_root.join(&epub.resources.get(&spine_item.idref).expect("Internal error: EPUB library failed to get resource for id listed in its spine.").path)),
+            path_from_rendition_root: standardize_pathbuf_separators(&epub.resources.get(&spine_item.idref).expect("Internal error: EPUB library failed to get resource for id listed in its spine.").path),
             linear: spine_item.linear,
         }).collect_vec();
         let raw_nonspine_resource_paths = epub
             .resources
             .values()
             .filter_map(|resource| {
-                let resource_path = raw_dir_path_from_library_root.join(&resource.path);
+                let resource_path = &resource.path;
                 match raw_spine_items
                     .iter()
-                    .any(|spine_item| spine_item.path == resource_path)
+                    .any(|spine_item| &spine_item.path_from_rendition_root == resource_path)
                 {
                     true => None,
-                    false => Some(standardize_pathbuf_separators(&resource_path)),
+                    false => Some(standardize_pathbuf_separators(resource_path)),
                 }
             })
             .collect_vec();
@@ -136,27 +151,65 @@ impl EpubInfo {
                 .iter()
                 .find(|item| item.linear)
                 .expect("Ill-formed EPUB: no linear spine items.")
-                .path,
+                .path_from_rendition_root,
         );
 
         Self {
             id: epub_id,
             title: epub.get_title().expect("Ill-formed EPUB: no title."),
+            creators,
             path_from_library_root,
             added_time: request_time,
             last_opened_time: request_time,
             raw_spine_items,
             raw_nonspine_resource_paths,
             raw_rendition: EpubRenditionInfo {
-                default_file_path_from_library_root: first_linear_raw_spine_item_path,
+                style: Style::raw(),
+                default_file_path_from_library_root: raw_dir_path_from_library_root
+                    .join(first_linear_raw_spine_item_path),
                 dir_path_from_library_root: raw_dir_path_from_library_root,
-                bytes: get_dir_size(&raw_dir),
+                bytes: get_dir_size(&raw_dir_path),
             },
+            nonraw_renditions: Vec::new(),
+        }
+    }
+
+    pub fn find_rendition(&self, style: &Style) -> Option<&EpubRenditionInfo> {
+        match style == &Style::raw() {
+            true => Some(&self.raw_rendition),
+            false => self
+                .nonraw_renditions
+                .iter()
+                .find(|rendition| style == &rendition.style),
         }
     }
 
     pub fn size_in_bytes(&self) -> u64 {
-        // Will need to be complexified once we add support for non-raw renditions
-        self.raw_rendition.bytes
+        let nonraw_rendition_bytes = self
+            .nonraw_renditions
+            .iter()
+            .fold(0, |bytes, rendition| bytes + rendition.bytes);
+        self.raw_rendition.bytes + nonraw_rendition_bytes
+    }
+
+    pub fn get_new_rendition_dir_path_from_style(&self, style: &Style) -> PathBuf {
+        lazy_static! {
+            static ref PADDING_AMOUNT: usize = u64::MAX.to_string().len();
+        }
+
+        let padded_style_hash = format!("{:0PADDING_AMOUNT$}", style.get_default_hash());
+        let mut path_under_consideration = self.path_from_library_root.join(&padded_style_hash);
+        let mut numeric_extension = 1;
+        while self.nonraw_renditions.iter().any(|rendition_info| {
+            rendition_info.dir_path_from_library_root == path_under_consideration
+                && style != &rendition_info.style
+        }) {
+            numeric_extension += 1;
+            path_under_consideration = self
+                .path_from_library_root
+                .join(format!("{padded_style_hash}_{numeric_extension}"));
+        }
+
+        path_under_consideration
     }
 }

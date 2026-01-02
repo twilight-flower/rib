@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{File, create_dir_all, read_to_string, remove_dir_all, write},
     io::BufReader,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use chrono::{DateTime, Utc};
@@ -11,7 +11,11 @@ use epub::doc::EpubDoc;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::epub::EpubInfo;
+use crate::{
+    epub::{EpubInfo, EpubRenditionInfo},
+    helpers::get_dir_size,
+    style::Style,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 enum LibraryBookInfo {
@@ -124,7 +128,7 @@ impl Library {
     pub fn register_epub_and_get_id(
         &mut self,
         epub: &mut EpubDoc<BufReader<File>>,
-        epub_path: &PathBuf,
+        epub_path: &Path,
         request_time: DateTime<Utc>,
     ) -> String {
         let id = match epub.get_release_identifier() {
@@ -145,18 +149,70 @@ impl Library {
         id
     }
 
-    pub fn open_book_raw(
+    pub fn register_book_styles(&mut self, id: &str, styles: &[Style]) {
+        let LibraryBookInfo::Epub(epub_info) = self.books.get_mut(id).expect(&format!(
+            "Couldn't register styles for book id {id}: not found in library index."
+        ));
+        let mut write_needed = false;
+        for style in styles {
+            let style_already_present = match style == &Style::raw() {
+                true => true,
+                false => epub_info.find_rendition(style).is_some(),
+            };
+            if !style_already_present {
+                let dir_path_from_library_root =
+                    epub_info.get_new_rendition_dir_path_from_style(style);
+                let dir_path = self.library_path.join(&dir_path_from_library_root);
+                create_dir_all(&dir_path)
+                    .expect("Couldn't create rendition directory for new style.");
+
+                // VERY TEMPORARY: currently it's safe to assume that any style which makes it here has include_index: true.
+                // Later on we'll need more branching here, and to actually do linking sometimes.
+                let meta_dir_path_from_library_root = dir_path_from_library_root.join("meta");
+                let meta_dir_path = self.library_path.join(&meta_dir_path_from_library_root);
+                create_dir_all(&meta_dir_path)
+                    .expect("Couldn't create rendition meta directory for new style.");
+                let index =
+                    String::from("<html><head></head><body><p>PLACEHOLDER</p></body></html>");
+                let index_path_from_library_root =
+                    meta_dir_path_from_library_root.join("index.html");
+                let index_path = self.library_path.join(&index_path_from_library_root);
+                write(&index_path, index).expect(&format!(
+                    "Failed to write rendition index to {}.",
+                    index_path.display()
+                ));
+
+                // let contents_dir = dir_path.join("contents");
+
+                epub_info.nonraw_renditions.push(EpubRenditionInfo {
+                    style: style.clone(),
+                    dir_path_from_library_root,
+                    default_file_path_from_library_root: index_path_from_library_root,
+                    bytes: get_dir_size(&dir_path),
+                });
+
+                write_needed = true;
+            }
+        }
+        if write_needed {
+            self.write();
+        }
+    }
+
+    pub fn open_book(
         &mut self,
         id: &str,
         request_time: DateTime<Utc>,
         browser: &Option<String>,
+        style: &Style,
     ) {
         let LibraryBookInfo::Epub(epub_info) = self.books.get_mut(id).expect(&format!(
             "Couldn't open book id {id}: not found in library index."
         ));
-        epub_info
-            .raw_rendition
-            .open_in_browser(&self.library_path, browser);
+        let target_rendition = epub_info.find_rendition(style).expect(&format!(
+            "Internal error: tried to open book id {id} with an unregistered style."
+        ));
+        target_rendition.open_in_browser(&self.library_path, browser);
         epub_info.last_opened_time = request_time;
         self.write();
     }

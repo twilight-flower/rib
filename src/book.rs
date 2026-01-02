@@ -1,24 +1,31 @@
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
 
-use crate::library::Library;
+use crate::{library::Library, style::Style};
 
 fn open_epub(
     library: &mut Library,
-    path: &PathBuf,
+    path: &Path,
     request_time: DateTime<Utc>,
     browser: &Option<String>,
+    styles: &[Style],
 ) -> String {
     // Returns id of opened EPUB
 
     let mut epub = EpubDoc::new(path).expect(&format!("Couldn't open {} as EPUB.", path.display()));
     let id = library.register_epub_and_get_id(&mut epub, path, request_time);
 
-    // TODO: process book into non-raw format, and open that instead, if needed
+    library.register_book_styles(&id, styles);
 
-    library.open_book_raw(&id, request_time, browser);
+    let first_style_specified = styles
+        .first()
+        .expect("Internal error: no target style defined.");
+    library.open_book(&id, request_time, browser, first_style_specified);
 
     id
 }
@@ -27,6 +34,7 @@ pub fn open_books(
     library: &mut Library,
     paths: Vec<PathBuf>,
     browser: Option<String>,
+    styles: Vec<Style>,
     max_books: Option<usize>,
     max_bytes: Option<u64>,
 ) {
@@ -35,7 +43,7 @@ pub fn open_books(
     let request_time = Utc::now();
     for path in paths {
         // Once we've got support for multiple formats, do branching here and maybe factor EPUB-handling into its own module.
-        let book_id = open_epub(library, &path, request_time, &browser);
+        let book_id = open_epub(library, &path, request_time, &browser, &styles);
         opened_book_ids.insert(book_id);
     }
 
