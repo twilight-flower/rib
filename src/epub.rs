@@ -4,9 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
-use itertools::Itertools;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
@@ -35,15 +35,21 @@ pub struct EpubRenditionInfo {
 }
 
 impl EpubRenditionInfo {
-    pub fn open_in_browser(&self, library_path: &Path, browser: &Option<String>) {
+    pub fn open_in_browser(
+        &self,
+        library_path: &Path,
+        browser: &Option<String>,
+    ) -> anyhow::Result<()> {
         let path_to_canonicalize = library_path.join(&self.default_file_path_from_library_root);
         let path_to_open = path_to_canonicalize
             .canonicalize() // To help cross-platform compatibility, hopefully
-            .expect(&format!(
-                "Unable to canonicalize book rendition path {} to open.",
-                path_to_canonicalize.display()
-            ));
-        browser::open(&path_to_open, browser);
+            .with_context(|| {
+                format!(
+                    "Unable to canonicalize book rendition path {} to open.",
+                    path_to_canonicalize.display()
+                )
+            })?;
+        browser::open(&path_to_open, browser)
     }
 }
 
@@ -85,7 +91,7 @@ impl EpubInfo {
         epub_id: String,
         epub_path: &Path,
         request_time: DateTime<Utc>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let path_from_library_root = library.get_internal_path_from_id(&epub_id);
         let raw_dir_path_from_library_root = path_from_library_root.join("raw");
         let raw_dir_path = library.library_path.join(&raw_dir_path_from_library_root);
@@ -96,16 +102,19 @@ impl EpubInfo {
                 true => {
                     let resource_path_parent = resource_path
                         .parent()
-                        .expect("Unreachable: joined path is root.");
-                    create_dir_all(&resource_path_parent).expect(&format!(
-                        "Failed to create directory {}.",
-                        resource_path_parent.display()
-                    ));
-                    let resource_bytes = epub.get_resource(&id).expect("Internal error: EPUB library failed to get resource for id listed in its resources.").0;
-                    write(&resource_path, resource_bytes)
-                        .expect(&format!("Failed to write to {}.", resource_path.display()));
+                        .context("Unreachable: joined path is root.")?;
+                    create_dir_all(&resource_path_parent).with_context(|| {
+                        format!(
+                            "Failed to create directory {}.",
+                            resource_path_parent.display()
+                        )
+                    })?;
+                    let resource_bytes = epub.get_resource(&id).context("Internal error: EPUB library failed to get resource for id listed in its resources.")?.0;
+                    write(&resource_path, resource_bytes).with_context(|| {
+                        format!("Failed to write to {}.", resource_path.display())
+                    })?;
                 }
-                false => panic!(
+                false => bail!(
                     "Book contains resource {}, which is attempting a zip slip.",
                     resource_path.display()
                 ),
@@ -127,10 +136,16 @@ impl EpubInfo {
             })
             .collect();
 
-        let raw_spine_items = epub.spine.iter().map(|spine_item| EpubSpineItem {
-            path_from_rendition_root: standardize_pathbuf_separators(&epub.resources.get(&spine_item.idref).expect("Internal error: EPUB library failed to get resource for id listed in its spine.").path),
-            linear: spine_item.linear,
-        }).collect_vec();
+        let raw_spine_items = epub
+            .spine
+            .iter()
+            .map(|spine_item| {
+                Ok(EpubSpineItem {
+                    path_from_rendition_root: standardize_pathbuf_separators(&epub.resources.get(&spine_item.idref).context("Internal error: EPUB library failed to get resource for id listed in its spine.")?.path),
+                    linear: spine_item.linear,
+                })
+            })
+            .collect::<anyhow::Result<Vec<EpubSpineItem>>>()?;
         let raw_nonspine_resource_paths = epub
             .resources
             .values()
@@ -144,19 +159,19 @@ impl EpubInfo {
                     false => Some(standardize_pathbuf_separators(resource_path)),
                 }
             })
-            .collect_vec();
+            .collect();
 
         let first_linear_raw_spine_item_path = standardize_pathbuf_separators(
             &raw_spine_items
                 .iter()
                 .find(|item| item.linear)
-                .expect("Ill-formed EPUB: no linear spine items.")
+                .context("Ill-formed EPUB: no linear spine items.")?
                 .path_from_rendition_root,
         );
 
-        Self {
+        Ok(Self {
             id: epub_id,
-            title: epub.get_title().expect("Ill-formed EPUB: no title."),
+            title: epub.get_title().context("Ill-formed EPUB: no title.")?,
             creators,
             path_from_library_root,
             added_time: request_time,
@@ -168,10 +183,10 @@ impl EpubInfo {
                 default_file_path_from_library_root: raw_dir_path_from_library_root
                     .join(first_linear_raw_spine_item_path),
                 dir_path_from_library_root: raw_dir_path_from_library_root,
-                bytes: get_dir_size(&raw_dir_path),
+                bytes: get_dir_size(&raw_dir_path)?,
             },
             nonraw_renditions: Vec::new(),
-        }
+        })
     }
 
     pub fn find_rendition(&self, style: &Style) -> Option<&EpubRenditionInfo> {

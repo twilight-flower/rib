@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use cli_table::{Cell, Table};
 use epub::doc::EpubDoc;
@@ -31,8 +32,6 @@ pub struct Library {
     index_path: PathBuf,
     #[serde(default)]
     books: HashMap<String, LibraryBookInfo>,
-    // max_books: Option<u64>,
-    // max_bytes: Option<u64>,
 }
 
 impl Library {
@@ -77,9 +76,9 @@ impl Library {
         new_cache
     }
 
-    pub fn open(library_dir_path: PathBuf) -> Self {
+    pub fn open(library_dir_path: PathBuf) -> anyhow::Result<Self> {
         let index_path = library_dir_path.join("library_index.json");
-        match read_to_string(&index_path) {
+        Ok(match read_to_string(&index_path) {
             Ok(index_string) => match serde_json::from_str::<Self>(&index_string) {
                 Ok(library_deserialized) => {
                     library_deserialized.with_paths(library_dir_path, index_path)
@@ -89,7 +88,7 @@ impl Library {
                         "Warning: library index at {} is ill-formed. Clearing library and creating new library index.",
                         index_path.display()
                     ); // Add y/n prompt for this in case people need the cache for something?
-                    remove_dir_all(&library_dir_path).expect("Failed to clear library.");
+                    remove_dir_all(&library_dir_path).context("Failed to clear library.")?;
                     Self::new(library_dir_path, index_path)
                 }
             },
@@ -100,7 +99,7 @@ impl Library {
                 );
                 Self::new(library_dir_path, index_path)
             }
-        }
+        })
     }
 
     // Open books
@@ -130,29 +129,29 @@ impl Library {
         epub: &mut EpubDoc<BufReader<File>>,
         epub_path: &Path,
         request_time: DateTime<Utc>,
-    ) -> String {
+    ) -> anyhow::Result<String> {
         let id = match epub.get_release_identifier() {
             Some(id) => id,
             None => epub
                 .unique_identifier
                 .as_ref()
-                .expect("Ill-formed EPUB: no unique identifier.")
+                .context("Ill-formed EPUB: no unique identifier.")?
                 .clone(),
         };
         if !self.books.contains_key(&id) {
             let new_epub_info =
-                EpubInfo::new_from_epub(self, epub, id.clone(), epub_path, request_time);
+                EpubInfo::new_from_epub(self, epub, id.clone(), epub_path, request_time)?;
             self.books
                 .insert(id.clone(), LibraryBookInfo::Epub(new_epub_info));
             self.write();
         }
-        id
+        Ok(id)
     }
 
-    pub fn register_book_styles(&mut self, id: &str, styles: &[Style]) {
-        let LibraryBookInfo::Epub(epub_info) = self.books.get_mut(id).expect(&format!(
-            "Couldn't register styles for book id {id}: not found in library index."
-        ));
+    pub fn register_book_styles(&mut self, id: &str, styles: &[Style]) -> anyhow::Result<()> {
+        let LibraryBookInfo::Epub(epub_info) = self.books.get_mut(id).with_context(|| {
+            format!("Couldn't register styles for book id {id}: not found in library index.")
+        })?;
         let mut write_needed = false;
         for style in styles {
             let style_already_present = match style == &Style::raw() {
@@ -164,23 +163,25 @@ impl Library {
                     epub_info.get_new_rendition_dir_path_from_style(style);
                 let dir_path = self.library_path.join(&dir_path_from_library_root);
                 create_dir_all(&dir_path)
-                    .expect("Couldn't create rendition directory for new style.");
+                    .context("Couldn't create rendition directory for new style.")?;
 
                 // VERY TEMPORARY: currently it's safe to assume that any style which makes it here has include_index: true.
                 // Later on we'll need more branching here, and to actually do linking sometimes.
                 let meta_dir_path_from_library_root = dir_path_from_library_root.join("meta");
                 let meta_dir_path = self.library_path.join(&meta_dir_path_from_library_root);
                 create_dir_all(&meta_dir_path)
-                    .expect("Couldn't create rendition meta directory for new style.");
+                    .context("Couldn't create rendition meta directory for new style.")?;
                 let index =
                     String::from("<html><head></head><body><p>PLACEHOLDER</p></body></html>");
                 let index_path_from_library_root =
                     meta_dir_path_from_library_root.join("index.html");
                 let index_path = self.library_path.join(&index_path_from_library_root);
-                write(&index_path, index).expect(&format!(
-                    "Failed to write rendition index to {}.",
-                    index_path.display()
-                ));
+                write(&index_path, index).with_context(|| {
+                    format!(
+                        "Failed to write rendition index to {}.",
+                        index_path.display()
+                    )
+                })?;
 
                 // let contents_dir = dir_path.join("contents");
 
@@ -188,7 +189,7 @@ impl Library {
                     style: style.clone(),
                     dir_path_from_library_root,
                     default_file_path_from_library_root: index_path_from_library_root,
-                    bytes: get_dir_size(&dir_path),
+                    bytes: get_dir_size(&dir_path)?,
                 });
 
                 write_needed = true;
@@ -197,6 +198,7 @@ impl Library {
         if write_needed {
             self.write();
         }
+        Ok(())
     }
 
     pub fn open_book(
@@ -205,21 +207,23 @@ impl Library {
         request_time: DateTime<Utc>,
         browser: &Option<String>,
         style: &Style,
-    ) {
-        let LibraryBookInfo::Epub(epub_info) = self.books.get_mut(id).expect(&format!(
-            "Couldn't open book id {id}: not found in library index."
-        ));
-        let target_rendition = epub_info.find_rendition(style).expect(&format!(
-            "Internal error: tried to open book id {id} with an unregistered style."
-        ));
-        target_rendition.open_in_browser(&self.library_path, browser);
+    ) -> anyhow::Result<()> {
+        let LibraryBookInfo::Epub(epub_info) = self
+            .books
+            .get_mut(id)
+            .with_context(|| format!("Couldn't open book id {id}: not found in library index."))?;
+        let target_rendition = epub_info.find_rendition(style).with_context(|| {
+            format!("Internal error: tried to open book id {id} with an unregistered style.")
+        })?;
+        target_rendition.open_in_browser(&self.library_path, browser)?;
         epub_info.last_opened_time = request_time;
         self.write();
+        Ok(())
     }
 
     // Manage library
 
-    pub fn list(&self) {
+    pub fn list(&self) -> anyhow::Result<()> {
         // Maybe give this more styling later; but it's good enough for now.
         let table = self
             .books
@@ -233,8 +237,9 @@ impl Library {
             "{}",
             table
                 .display()
-                .expect("Couldn't display library list table.")
+                .context("Couldn't display library list table.")?
         );
+        Ok(())
     }
 
     fn size_in_bytes(&self) -> u64 {
@@ -253,19 +258,22 @@ impl Library {
         too_many_books || too_many_bytes
     }
 
-    fn remove_book(&mut self, id: &str) {
-        let LibraryBookInfo::Epub(epub_info) = self.books.remove(id).expect(&format!(
-            "Couldn't remove book id {id}: not found in library index."
-        ));
+    fn remove_book(&mut self, id: &str) -> anyhow::Result<()> {
+        let LibraryBookInfo::Epub(epub_info) = self.books.remove(id).with_context(|| {
+            format!("Couldn't remove book id {id}: not found in library index.")
+        })?;
         let book_dir = self.library_path.join(&epub_info.path_from_library_root);
         if book_dir.is_dir() {
-            remove_dir_all(&book_dir).expect(&format!(
-                "Failed to remove {} from {}.",
-                epub_info.title,
-                book_dir.display()
-            ));
+            remove_dir_all(&book_dir).with_context(|| {
+                format!(
+                    "Failed to remove {} from {}.",
+                    epub_info.title,
+                    book_dir.display()
+                )
+            })?;
         } // If it exists but isn't a dir, maybe have handling for that to avoid later messes?
         println!("Removed {} from {}.", epub_info.title, book_dir.display());
+        Ok(())
     }
 
     pub fn truncate(
@@ -273,7 +281,7 @@ impl Library {
         max_books: Option<usize>,
         max_bytes: Option<u64>,
         ids_to_exclude: &HashSet<String>,
-    ) {
+    ) -> anyhow::Result<()> {
         let mut oversized = self.is_oversized(max_books, max_bytes);
         if oversized {
             let mut write_needed = false;
@@ -302,7 +310,7 @@ impl Library {
                 .collect_vec();
 
             while oversized && let Some(id) = ids_to_potentially_remove.pop() {
-                self.remove_book(&id);
+                self.remove_book(&id)?;
                 write_needed = true;
                 oversized = self.is_oversized(max_books, max_bytes);
             }
@@ -311,6 +319,7 @@ impl Library {
                 self.write();
             }
         }
+        Ok(())
     }
 
     pub fn clear(
@@ -318,13 +327,14 @@ impl Library {
         max_books: Option<usize>,
         max_bytes: Option<u64>,
         target_ids: &[String],
-    ) {
+    ) -> anyhow::Result<()> {
         if !target_ids.is_empty() {
             for id in target_ids {
-                self.remove_book(id);
+                self.remove_book(id)?;
             }
             self.write();
         }
-        self.truncate(max_books, max_bytes, &HashSet::new());
+        self.truncate(max_books, max_bytes, &HashSet::new())?;
+        Ok(())
     }
 }

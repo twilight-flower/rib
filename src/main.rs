@@ -8,6 +8,7 @@ mod style;
 
 use std::path::{Path, PathBuf};
 
+use anyhow::anyhow;
 use argh::{ArgsInfo, FromArgs};
 use directories::ProjectDirs;
 
@@ -84,17 +85,18 @@ struct Args {
 //   Main   //
 //////////////
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args: Args = argh::from_env();
 
-    let project_dirs = ProjectDirs::from("", "", "rib")
-        .expect("Couldn't open library: no home directory path found.");
+    let project_dirs = ProjectDirs::from("", "", "rib").ok_or(anyhow!(
+        "Couldn't open library: no home directory path found."
+    ))?;
 
     let config_path = project_dirs.config_dir().join("config.toml");
-    let config = Config::open(&config_path);
+    let config = Config::open(&config_path)?;
 
     let library_path = project_dirs.data_local_dir().join("library");
-    let mut library = Library::open(library_path);
+    let mut library = Library::open(library_path)?;
 
     match args.subcommand {
         Some(subcommand) => match subcommand {
@@ -123,8 +125,9 @@ fn main() {
                     })
                     .unwrap_or("rib");
                 let help_text = Args::from_args(&[run_command], &["help"])
-                    .expect_err("Internal error: failed to print help text.");
+                    .expect_err("Internal error: failed to print help text."); // Error type here isn't anyhow-compatible
                 println!("{}", help_text.output);
+                Ok(())
             }
             _ => {
                 let browser = match (args.browser, config.default_browser) {

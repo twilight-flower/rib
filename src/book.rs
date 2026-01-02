@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
 
@@ -14,20 +15,21 @@ fn open_epub(
     request_time: DateTime<Utc>,
     browser: &Option<String>,
     styles: &[Style],
-) -> String {
+) -> anyhow::Result<String> {
     // Returns id of opened EPUB
 
-    let mut epub = EpubDoc::new(path).expect(&format!("Couldn't open {} as EPUB.", path.display()));
-    let id = library.register_epub_and_get_id(&mut epub, path, request_time);
+    let mut epub =
+        EpubDoc::new(path).with_context(|| format!("Couldn't open {} as EPUB.", path.display()))?;
+    let id = library.register_epub_and_get_id(&mut epub, path, request_time)?;
 
-    library.register_book_styles(&id, styles);
+    library.register_book_styles(&id, styles)?;
 
     let first_style_specified = styles
         .first()
-        .expect("Internal error: no target style defined.");
-    library.open_book(&id, request_time, browser, first_style_specified);
+        .context("Internal error: no target style defined.")?;
+    library.open_book(&id, request_time, browser, first_style_specified)?;
 
-    id
+    Ok(id)
 }
 
 pub fn open_books(
@@ -37,15 +39,16 @@ pub fn open_books(
     styles: Vec<Style>,
     max_books: Option<usize>,
     max_bytes: Option<u64>,
-) {
+) -> anyhow::Result<()> {
     let mut opened_book_ids = HashSet::new();
 
     let request_time = Utc::now();
     for path in paths {
         // Once we've got support for multiple formats, do branching here and maybe factor EPUB-handling into its own module.
-        let book_id = open_epub(library, &path, request_time, &browser, &styles);
+        let book_id = open_epub(library, &path, request_time, &browser, &styles)?;
         opened_book_ids.insert(book_id);
     }
 
-    library.truncate(max_books, max_bytes, &opened_book_ids);
+    library.truncate(max_books, max_bytes, &opened_book_ids)?;
+    Ok(())
 }

@@ -3,30 +3,33 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serializer, de::Error};
+use serde::{Deserialize, Deserializer, Serializer, de::Error as DeserializeError};
+
+#[cfg(not(any(windows, unix)))]
+use anyhow::anyhow;
 
 ////////////
 //   fs   //
 ////////////
 
-pub fn get_dir_size(path: &Path) -> u64 {
+pub fn get_dir_size(path: &Path) -> anyhow::Result<u64> {
     // Doesn't follow symlinks. Could be pretty easily modded to do so if useful later.
     read_dir(path)
-        .expect(&format!("Couldn't read {} as directory.", path.display()))
-        .fold(0, |bytes, maybe_dir_entry| {
-            let dir_entry =
-                maybe_dir_entry.expect(&format!("Error viewing entry in {}", path.display()));
+        .with_context(|| format!("Couldn't read {} as directory.", path.display()))?
+        .try_fold(0, |bytes, maybe_dir_entry| {
+            let dir_entry = maybe_dir_entry
+                .with_context(|| format!("Error viewing entry in {}", path.display()))?;
             let dir_entry_path = dir_entry.path();
-            let dir_entry_metadata = symlink_metadata(&dir_entry_path).expect(&format!(
-                "Couldn't read metadata for {}.",
-                dir_entry_path.display()
-            ));
-            bytes
+            let dir_entry_metadata = symlink_metadata(&dir_entry_path).with_context(|| {
+                format!("Couldn't read metadata for {}.", dir_entry_path.display())
+            })?;
+            Ok(bytes
                 + match dir_entry_metadata.is_dir() {
-                    true => get_dir_size(&dir_entry_path),
+                    true => get_dir_size(&dir_entry_path)?,
                     false => dir_entry_metadata.len(),
-                }
+                })
         })
 }
 
@@ -68,21 +71,25 @@ pub fn serialize_datetime<S: Serializer>(
 //   linking   //
 /////////////////
 
-pub fn create_link(source: &Path, destination: &Path) {
+pub fn create_link(source: &Path, destination: &Path) -> anyhow::Result<()> {
     #[cfg(windows)]
-    hard_link(destination, source).expect(&format!(
-        "Failed to link {} to {}.",
-        source.display(),
-        destination.display()
-    ));
+    hard_link(destination, source).with_context(|| {
+        format!(
+            "Failed to link {} to {}.",
+            source.display(),
+            destination.display()
+        )
+    })?;
 
     #[cfg(unix)]
     std::os::unix::fs::symlink(destination, source);
 
     #[cfg(not(any(windows, unix)))]
-    panic!(
+    anyhow!(
         "Unable to link {} to {}: unsupported OS.",
         source.display(),
         destination.display()
     );
+
+    Ok(())
 }
