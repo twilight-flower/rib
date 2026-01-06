@@ -171,10 +171,10 @@ impl Library {
                     &epub_info.raw_spine_items,
                     &epub_info.table_of_contents,
                 )?;
-                let index_html = index.to_html(epub_info, *style)?;
-                let index_path_from_library_root = dir_path_from_library_root.join("index.html");
+                let index_xhtml = index.to_xhtml(epub_info, *style)?;
+                let index_path_from_library_root = dir_path_from_library_root.join("index.xhtml");
                 let index_path = self.library_path.join(&index_path_from_library_root);
-                write(&index_path, &index_html).with_context(|| {
+                write(&index_path, &index_xhtml).with_context(|| {
                     format!(
                         "Failed to write rendition index to {}.",
                         index_path.display()

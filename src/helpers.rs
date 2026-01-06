@@ -1,11 +1,16 @@
 use std::{
     fs::{hard_link, read_dir, symlink_metadata},
+    io::Write,
     path::{Path, PathBuf},
 };
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serializer, de::Error as DeserializeError};
+use xml::{
+    EventWriter,
+    writer::{XmlEvent, events::StartElementBuilder},
+};
 
 #[cfg(not(any(windows, unix)))]
 use anyhow::anyhow;
@@ -37,13 +42,19 @@ pub fn get_dir_size(path: &Path) -> anyhow::Result<u64> {
 //   path   //
 //////////////
 
-pub fn standardize_pathbuf_separators(pathbuf_in: &Path) -> PathBuf {
+pub fn standardize_path_separators(pathbuf_in: &Path) -> PathBuf {
     pathbuf_in
         .components()
         .fold(PathBuf::new(), |mut pathbuf_out, component| {
             pathbuf_out.push(component);
             pathbuf_out
         })
+}
+
+pub fn unwrap_path_utf8(path: &Path) -> anyhow::Result<&str> {
+    Ok(path
+        .to_str()
+        .context("Ill-formed EPUB: non-UTF-8 path encountered.")?)
 }
 
 ///////////////
@@ -65,6 +76,57 @@ pub fn serialize_datetime<S: Serializer>(
 ) -> Result<S::Ok, S::Error> {
     let datetime_string = datetime.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true);
     serializer.serialize_str(&datetime_string)
+}
+
+/////////////
+//   xml   //
+/////////////
+
+pub fn write_xhtml_declaration<W: Write>(writer: &mut EventWriter<W>) -> anyhow::Result<()> {
+    writer
+        .write(XmlEvent::StartDocument {
+            version: xml::common::XmlVersion::Version10,
+            encoding: Some("utf-8"),
+            standalone: None,
+        })
+        .context("Failed to write XML document declaration.")?;
+    writer
+        .inner_mut()
+        .write(b"\n<!DOCTYPE html>")
+        .context("Failed to write HTML doctype in XML context.")?;
+    Ok(())
+}
+
+pub fn wrap_xml_element_write<W: Write, F: FnOnce(&mut EventWriter<W>) -> anyhow::Result<()>>(
+    writer: &mut EventWriter<W>,
+    element_builder: StartElementBuilder,
+    inner_write_fn: F,
+) -> anyhow::Result<()> {
+    let element_event: XmlEvent = element_builder.into();
+    let element_event_name = match element_event {
+        XmlEvent::StartElement { name, .. } => name,
+        _ => bail!("Unreachable: XML start element builder didn't build into start element."),
+    };
+    writer
+        .write(element_event)
+        .with_context(|| format!("Failed to write {} XML element start.", element_event_name))?;
+    inner_write_fn(writer)?;
+    writer
+        .write(XmlEvent::EndElement {
+            name: Some(element_event_name),
+        })
+        .with_context(|| format!("Failed to write {} XML element end.", element_event_name))?;
+    Ok(())
+}
+
+pub fn write_xml_characters<W: Write>(
+    writer: &mut EventWriter<W>,
+    characters: &str,
+) -> anyhow::Result<()> {
+    writer
+        .write(XmlEvent::characters(characters))
+        .context("Failed to write XML characters.")?;
+    Ok(())
 }
 
 /////////////////
