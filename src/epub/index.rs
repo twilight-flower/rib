@@ -87,7 +87,7 @@ impl<'a> EpubIndex<'a> {
         spine_associated_toc_items_iter: &mut std::iter::Peekable<T>,
         rendition_contents_dir: &Path,
         current_ul_nesting_level: u64,
-    ) -> Markup {
+    ) -> anyhow::Result<Markup> {
         // The while loop needs to be outside of the html macro because the html macro doesn't support break
         let mut html_fragment = html! {};
         while let Some(next_toc_item) = spine_associated_toc_items_iter.peek() {
@@ -95,13 +95,13 @@ impl<'a> EpubIndex<'a> {
                 Ordering::Less => html! {
                     (html_fragment)
                     ul {
-                        (Self::list_toc_items_for_linear_index_spine_entry_recursive(spine_associated_toc_items_iter, rendition_contents_dir, current_ul_nesting_level + 1))
+                        (Self::list_toc_items_for_linear_index_spine_entry_recursive(spine_associated_toc_items_iter, rendition_contents_dir, current_ul_nesting_level + 1)?)
                     }
                 },
                 Ordering::Equal => {
-                    let toc_item = spine_associated_toc_items_iter
-                        .next()
-                        .expect("Unreachable: no next item on peekable iter which peeked to Some.");
+                    let toc_item = spine_associated_toc_items_iter.next().ok_or(anyhow!(
+                        "Unreachable: no next item on peekable iter which peeked to Some."
+                    ))?;
                     html! {
                         (html_fragment)
                         li {
@@ -112,13 +112,13 @@ impl<'a> EpubIndex<'a> {
                 Ordering::Greater => break, // This branch is currently untested; find a book to make sure it works
             }
         }
-        html_fragment
+        Ok(html_fragment)
     }
 
     fn list_toc_items_for_linear_index_spine_entry(
         spine_associated_toc_items: &[&'a EpubTocItem],
         rendition_contents_dir: &Path,
-    ) -> Markup {
+    ) -> anyhow::Result<Markup> {
         Self::list_toc_items_for_linear_index_spine_entry_recursive(
             &mut spine_associated_toc_items.iter().copied().peekable(),
             rendition_contents_dir,
@@ -195,7 +195,7 @@ impl<'a> EpubIndex<'a> {
                                             @match toc_items.is_empty() {
                                                 true => br;
                                                 false => ul {
-                                                    (Self::list_toc_items_for_linear_index_spine_entry(toc_items, &rendition_contents_dir))
+                                                    (Self::list_toc_items_for_linear_index_spine_entry(toc_items, &rendition_contents_dir)?)
                                                 }
                                             }
                                         }
@@ -212,7 +212,7 @@ impl<'a> EpubIndex<'a> {
                                     td {
                                         ul {
                                             @for spine_item in spine {
-                                                // Maybe do something to mark nonlinear ones differently? (Previously they weren't rendered at all; this seemed suboptimal for usability.)
+                                                // Maybe do something to mark nonlinear spine-entries differently? (Previously they weren't rendered at all; this seemed suboptimal for usability.)
                                                 li {
                                                     a href=(rendition_contents_dir.join(&spine_item.path).display()) { (spine_item.path.display()) }
                                                 }
