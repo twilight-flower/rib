@@ -1,12 +1,15 @@
+pub mod index;
+
 use std::{
     fs::{File, create_dir_all, write},
     io::BufReader,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
@@ -21,9 +24,66 @@ use crate::{
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EpubSpineItem {
-    pub path_from_rendition_root: PathBuf,
+    pub path: PathBuf,
     pub linear: bool,
     // properties can go here later, but ignore them for now
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EpubTocItem {
+    label: String,
+    path_without_fragment: PathBuf,
+    path_with_fragment: PathBuf,
+    children: Vec<EpubTocItem>,
+    nesting_level: u64,
+}
+
+impl EpubTocItem {
+    fn from_epub_library_representation(
+        source: epub::doc::NavPoint,
+        nesting_level: u64,
+    ) -> anyhow::Result<Self> {
+        let mut path_split = source
+            .content
+            .to_str()
+            .ok_or(anyhow!("Invalid EPUB: on-UTF-8 path encountered."))?
+            .split('#')
+            .collect_vec();
+        let path = match path_split.len() {
+            0 => PathBuf::new(), // This should be possible per the EPUB spec, even if the library is failing to expose it well.
+            1 => PathBuf::from(
+                path_split
+                    .first()
+                    .ok_or(anyhow!("Unreachable: no first entry in vec of length 1."))?,
+            ),
+            _ => {
+                let _fragment = path_split
+                    .pop()
+                    .ok_or(anyhow!("Unreachable: no last entry in vec of length >1."))?;
+                PathBuf::from(path_split.join("#"))
+            }
+        };
+        Ok(Self {
+            label: source.label,
+            path_without_fragment: path,
+            path_with_fragment: source.content,
+            children: source
+                .children
+                .into_iter()
+                .map(|child| Self::from_epub_library_representation(child, nesting_level + 1))
+                .collect::<anyhow::Result<Vec<Self>>>()?,
+            nesting_level,
+        })
+    }
+
+    fn flattened(&self) -> Vec<&Self> {
+        self.children
+            .iter()
+            .fold(vec![self], |mut accumulator, child| {
+                accumulator.append(&mut child.flattened());
+                accumulator
+            })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -61,6 +121,10 @@ pub struct EpubInfo {
 
     // Display-relevant metadata
     pub creators: Vec<String>,
+    pub cover_path: Option<PathBuf>,
+    pub first_linear_spine_item_path: PathBuf,
+    pub last_linear_spine_item_path: PathBuf,
+    // pub bodymatter_path: Option<PathBuf>,
 
     // Library-management-relevant metadata
     pub path_from_library_root: PathBuf,
@@ -78,6 +142,7 @@ pub struct EpubInfo {
     // Contents
     pub raw_spine_items: Vec<EpubSpineItem>,
     pub raw_nonspine_resource_paths: Vec<PathBuf>,
+    pub table_of_contents: Vec<EpubTocItem>,
 
     // Renditions
     pub raw_rendition: EpubRenditionInfo,
@@ -135,13 +200,23 @@ impl EpubInfo {
                 false => None,
             })
             .collect();
+        let cover_path = match epub.get_cover_id() {
+            // Match instead of map to avoid needing to unwrap the find-output in a closure where passing to anyhow is inconvenient
+            Some(cover_id) => epub.resources.iter().find_map(|(resource_id, resource)| {
+                match cover_id == **resource_id {
+                    true => Some(standardize_pathbuf_separators(&resource.path)),
+                    false => None,
+                }
+            }),
+            None => None,
+        };
 
         let raw_spine_items = epub
             .spine
             .iter()
             .map(|spine_item| {
                 Ok(EpubSpineItem {
-                    path_from_rendition_root: standardize_pathbuf_separators(&epub.resources.get(&spine_item.idref).context("Internal error: EPUB library failed to get resource for id listed in its spine.")?.path),
+                    path: standardize_pathbuf_separators(&epub.resources.get(&spine_item.idref).context("Internal error: EPUB library failed to get resource for id listed in its spine.")?.path),
                     linear: spine_item.linear,
                 })
             })
@@ -153,39 +228,56 @@ impl EpubInfo {
                 let resource_path = &resource.path;
                 match raw_spine_items
                     .iter()
-                    .any(|spine_item| &spine_item.path_from_rendition_root == resource_path)
+                    .any(|spine_item| &spine_item.path == resource_path)
                 {
                     true => None,
                     false => Some(standardize_pathbuf_separators(resource_path)),
                 }
             })
             .collect();
+        let table_of_contents = epub
+            .toc
+            .iter()
+            .map(|navpoint| EpubTocItem::from_epub_library_representation(navpoint.clone(), 0))
+            .collect::<anyhow::Result<Vec<EpubTocItem>>>()?;
 
-        let first_linear_raw_spine_item_path = standardize_pathbuf_separators(
+        let first_linear_spine_item_path = standardize_pathbuf_separators(
             &raw_spine_items
                 .iter()
                 .find(|item| item.linear)
                 .context("Ill-formed EPUB: no linear spine items.")?
-                .path_from_rendition_root,
+                .path,
+        );
+        let last_linear_spine_item_path = standardize_pathbuf_separators(
+            &raw_spine_items
+                .iter()
+                .rev()
+                .find(|item| item.linear)
+                .context("Ill-formed EPUB: no linear spine items.")?
+                .path,
         );
 
         Ok(Self {
             id: epub_id,
             title: epub.get_title().context("Ill-formed EPUB: no title.")?,
             creators,
+            cover_path,
+            last_linear_spine_item_path,
             path_from_library_root,
             added_time: request_time,
             last_opened_time: request_time,
             raw_spine_items,
             raw_nonspine_resource_paths,
+            table_of_contents,
             raw_rendition: EpubRenditionInfo {
                 style: Style::raw(),
                 default_file_path_from_library_root: raw_dir_path_from_library_root
-                    .join(first_linear_raw_spine_item_path),
+                    .join(&first_linear_spine_item_path),
                 dir_path_from_library_root: raw_dir_path_from_library_root,
                 bytes: get_dir_size(&raw_dir_path)?,
             },
             nonraw_renditions: Vec::new(),
+            first_linear_spine_item_path,
         })
     }
 

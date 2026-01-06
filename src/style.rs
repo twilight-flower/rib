@@ -29,4 +29,9 @@ impl Style {
         self.hash(&mut default_hasher);
         default_hasher.finish()
     }
+
+    pub fn uses_raw_contents_dir(&self) -> bool {
+        // This is going to need actual logic once we've got navigation and stylesheet options
+        true
+    }
 }

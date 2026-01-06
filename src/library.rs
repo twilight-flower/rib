@@ -13,7 +13,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    epub::{EpubInfo, EpubRenditionInfo},
+    epub::{EpubInfo, EpubRenditionInfo, index::EpubIndex},
     helpers::get_dir_size,
     style::Style,
 };
@@ -85,10 +85,10 @@ impl Library {
                 }
                 Err(_) => {
                     println!(
-                        "Warning: library index at {} is ill-formed. Clearing library and creating new library index.",
+                        "Warning: library index at {} is ill-formed. Deleting library and creating new library index.",
                         index_path.display()
                     ); // Add y/n prompt for this in case people need the cache for something?
-                    remove_dir_all(&library_dir_path).context("Failed to clear library.")?;
+                    remove_dir_all(&library_dir_path).context("Failed to delete library.")?;
                     Self::new(library_dir_path, index_path)
                 }
             },
@@ -167,19 +167,27 @@ impl Library {
 
                 // VERY TEMPORARY: currently it's safe to assume that any style which makes it here has include_index: true.
                 // Later on we'll need more branching here, and to actually do linking sometimes.
-                let meta_dir_path_from_library_root = dir_path_from_library_root.join("meta");
-                let meta_dir_path = self.library_path.join(&meta_dir_path_from_library_root);
-                create_dir_all(&meta_dir_path)
-                    .context("Couldn't create rendition meta directory for new style.")?;
-                let index =
-                    String::from("<html><head></head><body><p>PLACEHOLDER</p></body></html>");
-                let index_path_from_library_root =
-                    meta_dir_path_from_library_root.join("index.html");
+                let index = EpubIndex::from_spine_and_toc(
+                    &epub_info.raw_spine_items,
+                    &epub_info.table_of_contents,
+                )?;
+                let index_html = index.to_html(epub_info, *style)?;
+                let index_path_from_library_root = dir_path_from_library_root.join("index.html");
                 let index_path = self.library_path.join(&index_path_from_library_root);
-                write(&index_path, index).with_context(|| {
+                write(&index_path, &index_html).with_context(|| {
                     format!(
                         "Failed to write rendition index to {}.",
                         index_path.display()
+                    )
+                })?;
+
+                // Index stylesheet will need to be generated more dynamically once we've got user-supplied styling enabled
+                let index_stylesheet = include_str!("../assets/index_styles.css");
+                let index_stylesheet_path = dir_path.join("index_styles.css");
+                write(&index_stylesheet_path, index_stylesheet).with_context(|| {
+                    format!(
+                        "Failed to write rendition index stylesheet to {}.",
+                        index_stylesheet_path.display()
                     )
                 })?;
 
