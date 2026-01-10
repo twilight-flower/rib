@@ -438,3 +438,28 @@ impl<'a> EpubIndex<'a> {
         Ok(writer.into_inner())
     }
 }
+
+pub fn generate_stylesheet(_style: &Style) -> String {
+    r#"
+body {
+	text-align: center;
+}
+
+table {
+	border-collapse: collapse;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+td {
+	border: 1px solid black;
+	vertical-align: top;
+}
+
+ul {
+	text-align: left;
+}
+"#
+    .trim_start()
+    .to_string()
+}

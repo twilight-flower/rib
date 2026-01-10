@@ -13,4 +13,4 @@
 # max_library_books = 100
 max_library_bytes = 1_000_000 # 100 MB
 
-### TODO: stylesheets
+### TODO: stylesheets, including index-generation and navigation-injection
