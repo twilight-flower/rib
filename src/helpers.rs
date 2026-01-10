@@ -94,6 +94,10 @@ pub fn write_xhtml_declaration<W: Write>(writer: &mut EventWriter<W>) -> anyhow:
         .inner_mut()
         .write(b"\n<!DOCTYPE html>")
         .context("Failed to write HTML doctype in XML context.")?;
+
+    // `xml` library has crude doctype support, but it is newline-eating and therefore produces an uglier output for now. Hopefully this will change with time.
+    // writer.write(XmlEvent::Doctype("<!DOCTYPE html>")).context("Failed to write HTML doctype in XML context.")?;
+
     Ok(())
 }
 

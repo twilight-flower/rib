@@ -1,16 +1,17 @@
 pub mod index;
+pub mod xhtml;
 
 use std::{
     fs::{File, create_dir_all, write},
     io::BufReader,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -50,12 +51,12 @@ impl EpubTocItem {
             1 => PathBuf::from(
                 path_split
                     .first()
-                    .ok_or(anyhow!("Unreachable: no first entry in vec of length 1."))?,
+                    .context("Unreachable: no first entry in vec of length 1.")?,
             ),
             _ => {
                 let _fragment = path_split
                     .pop()
-                    .ok_or(anyhow!("Unreachable: no last entry in vec of length >1."))?;
+                    .context("Unreachable: no last entry in vec of length >1.")?;
                 PathBuf::from(path_split.join("#"))
             }
         };
@@ -136,8 +137,8 @@ pub struct EpubInfo {
     pub last_opened_time: DateTime<Utc>,
 
     // Contents
-    pub raw_spine_items: Vec<EpubSpineItem>,
-    pub raw_nonspine_resource_paths: Vec<PathBuf>,
+    pub spine_items: Vec<EpubSpineItem>,
+    pub nonspine_resource_paths: Vec<PathBuf>,
     pub table_of_contents: Vec<EpubTocItem>,
 
     // Renditions
@@ -262,8 +263,8 @@ impl EpubInfo {
             path_from_library_root,
             added_time: request_time,
             last_opened_time: request_time,
-            raw_spine_items,
-            raw_nonspine_resource_paths,
+            spine_items: raw_spine_items,
+            nonspine_resource_paths: raw_nonspine_resource_paths,
             table_of_contents,
             raw_rendition: EpubRenditionInfo {
                 style: Style::raw(),
@@ -296,9 +297,7 @@ impl EpubInfo {
     }
 
     pub fn get_new_rendition_dir_path_from_style(&self, style: &Style) -> PathBuf {
-        lazy_static! {
-            static ref PADDING_AMOUNT: usize = u64::MAX.to_string().len();
-        }
+        static PADDING_AMOUNT: LazyLock<usize> = LazyLock::new(|| u64::MAX.to_string().len());
 
         let padded_style_hash = format!("{:0PADDING_AMOUNT$}", style.get_default_hash());
         let mut path_under_consideration = self.path_from_library_root.join(&padded_style_hash);

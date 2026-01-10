@@ -8,7 +8,7 @@ mod style;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::anyhow;
+use anyhow::Context;
 use argh::{ArgsInfo, FromArgs};
 use directories::ProjectDirs;
 
@@ -88,9 +88,8 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args: Args = argh::from_env();
 
-    let project_dirs = ProjectDirs::from("", "", "rib").ok_or(anyhow!(
-        "Couldn't open library: no home directory path found."
-    ))?;
+    let project_dirs = ProjectDirs::from("", "", "rib")
+        .context("Couldn't open library: no home directory path found.")?;
 
     let config_path = project_dirs.config_dir().join("config.toml");
     let config = Config::open(&config_path)?;

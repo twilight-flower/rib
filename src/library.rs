@@ -13,8 +13,8 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    epub::{EpubInfo, EpubRenditionInfo, index::EpubIndex},
-    helpers::get_dir_size,
+    epub::{EpubInfo, EpubRenditionInfo, index::EpubIndex, xhtml::adjust_spine_xhtml},
+    helpers::{create_link, get_dir_size},
     style::Style,
 };
 
@@ -165,38 +165,116 @@ impl Library {
                 create_dir_all(&dir_path)
                     .context("Couldn't create rendition directory for new style.")?;
 
-                // VERY TEMPORARY: currently it's safe to assume that any style which makes it here has include_index: true.
-                // Later on we'll need more branching here, and to actually do linking sometimes.
-                let index = EpubIndex::from_spine_and_toc(
-                    &epub_info.raw_spine_items,
-                    &epub_info.table_of_contents,
-                )?;
-                let index_xhtml = index.to_xhtml(epub_info, *style)?;
-                let index_path_from_library_root = dir_path_from_library_root.join("index.xhtml");
-                let index_path = self.library_path.join(&index_path_from_library_root);
-                write(&index_path, &index_xhtml).with_context(|| {
-                    format!(
-                        "Failed to write rendition index to {}.",
-                        index_path.display()
-                    )
-                })?;
+                if style.inject_navigation {
+                    // Will also need to branch on stylesheet stuff later
+                    let raw_rendition_path = self
+                        .library_path
+                        .join(&epub_info.raw_rendition.dir_path_from_library_root);
+                    let contents_dir = dir_path.join("contents");
 
-                // Index stylesheet will need to be generated more dynamically once we've got user-supplied styling enabled
-                let index_stylesheet = include_str!("../assets/index_styles.css");
-                let index_stylesheet_path = dir_path.join("index_styles.css");
-                write(&index_stylesheet_path, index_stylesheet).with_context(|| {
-                    format!(
-                        "Failed to write rendition index stylesheet to {}.",
-                        index_stylesheet_path.display()
-                    )
-                })?;
+                    for resource_path in &epub_info.nonspine_resource_paths {
+                        let resource_link_path = contents_dir.join(resource_path);
+                        let resource_link_path_parent = resource_link_path
+                            .parent()
+                            .context("Unreachable: joined path is root.")?;
+                        create_dir_all(&resource_link_path_parent).with_context(|| {
+                            format!(
+                                "Failed to create directory {}",
+                                resource_link_path_parent.display()
+                            )
+                        })?;
 
-                // let contents_dir = dir_path.join("contents");
+                        let resource_destination_path = raw_rendition_path.join(resource_path);
+                        create_link(&resource_link_path, &resource_destination_path)?;
+                    }
+                    for (index, spine_item) in epub_info.spine_items.iter().enumerate() {
+                        // Todo: add support for SVG spine items
+                        let raw_spine_item_path = raw_rendition_path.join(&spine_item.path);
+                        let modified_spine_item_path = contents_dir.join(&spine_item.path);
+                        let modified_spine_item_xhtml = adjust_spine_xhtml(
+                            &epub_info,
+                            &contents_dir,
+                            &raw_spine_item_path,
+                            &modified_spine_item_path,
+                            index,
+                            style,
+                        )?;
+                        let modified_spine_item_path_parent = modified_spine_item_path
+                            .parent()
+                            .context("Unreachable: joined path is root.")?;
+                        create_dir_all(&modified_spine_item_path_parent).with_context(|| {
+                            format!(
+                                "Failed to create directory {}",
+                                modified_spine_item_path_parent.display()
+                            )
+                        })?;
+                        write(&modified_spine_item_path, modified_spine_item_xhtml).with_context(
+                            || {
+                                format!(
+                                    "Failed to write file to {}.",
+                                    modified_spine_item_path.display()
+                                )
+                            },
+                        )?;
+                    }
+
+                    let navigation_stylesheet = include_str!("../assets/navigation_styles.css");
+                    let navigation_stylesheet_path = dir_path.join("navigation_styles.css");
+                    write(&navigation_stylesheet_path, navigation_stylesheet).with_context(
+                        || {
+                            format!(
+                                "Failed to write rendition navigation stylesheet to {}.",
+                                navigation_stylesheet_path.display()
+                            )
+                        },
+                    )?;
+                }
+
+                let default_file_path_from_library_root = match style.include_index {
+                    true => {
+                        let index = EpubIndex::from_spine_and_toc(
+                            &epub_info.spine_items,
+                            &epub_info.table_of_contents,
+                        )?;
+                        let index_xhtml = index.to_xhtml(epub_info, *style)?;
+                        let index_path_from_library_root =
+                            dir_path_from_library_root.join("index.xhtml");
+                        let index_path = self.library_path.join(&index_path_from_library_root);
+                        write(&index_path, &index_xhtml).with_context(|| {
+                            format!(
+                                "Failed to write rendition index to {}.",
+                                index_path.display()
+                            )
+                        })?;
+
+                        // Index stylesheet will need to be generated more dynamically once we've got user-supplied styling enabled
+                        let index_stylesheet = include_str!("../assets/index_styles.css");
+                        let index_stylesheet_path = dir_path.join("index_styles.css");
+                        write(&index_stylesheet_path, index_stylesheet).with_context(|| {
+                            format!(
+                                "Failed to write rendition index stylesheet to {}.",
+                                index_stylesheet_path.display()
+                            )
+                        })?;
+
+                        index_path_from_library_root
+                    }
+                    false => match style.uses_raw_contents_dir() {
+                        // This is slightly inefficient, calculating the contents dir redundantly. But would be hard to convince the compiler to go along with defining it elsewhere more efficiently, and this isn't *that* bad, so here it is.
+                        true => epub_info
+                            .raw_rendition
+                            .default_file_path_from_library_root
+                            .clone(),
+                        false => dir_path_from_library_root
+                            .join("contents")
+                            .join(&epub_info.first_linear_spine_item_path),
+                    },
+                };
 
                 epub_info.nonraw_renditions.push(EpubRenditionInfo {
                     style: style.clone(),
                     dir_path_from_library_root,
-                    default_file_path_from_library_root: index_path_from_library_root,
+                    default_file_path_from_library_root,
                     bytes: get_dir_size(&dir_path)?,
                 });
 

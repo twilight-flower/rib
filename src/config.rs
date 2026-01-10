@@ -1,10 +1,10 @@
 use std::{
     fs::{create_dir_all, read_to_string, write},
     path::Path,
+    sync::LazyLock,
 };
 
 use anyhow::Context;
-use lazy_static::lazy_static;
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -20,11 +20,11 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        lazy_static! {
-            // Can't use anyhow here because default method doesn't support result return; stability here should be guaranteed through tests instead
-            static ref DEFAULT_CONFIG: Config = toml::from_str(Config::DEFAULT_STRING)
-                .expect("Internal error: failed to deserialize default config.");
-        }
+        // Can't use anyhow here because default method doesn't support result return; stability here should be guaranteed through tests instead
+        static DEFAULT_CONFIG: LazyLock<Config> = LazyLock::new(|| {
+            toml::from_str(Config::DEFAULT_STRING)
+                .expect("Internal error: failed to deserialize default config.")
+        });
         DEFAULT_CONFIG.clone()
     }
 }

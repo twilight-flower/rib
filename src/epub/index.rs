@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::anyhow;
+use anyhow::Context;
 use itertools::Itertools;
 use xml::{EventWriter, writer::XmlEvent};
 
@@ -32,10 +32,12 @@ impl<'a> EpubIndex<'a> {
             let toc_item_spine_index = spine
                 .iter()
                 .position(|spine_item| spine_item.path == toc_item.path_without_fragment)
-                .ok_or(anyhow!(
-                    "Ill-formed EPUB: TOC contains path {}, which doesn't appear in spine.",
-                    toc_item.path_without_fragment.display()
-                ))?;
+                .with_context(|| {
+                    format!(
+                        "Ill-formed EPUB: TOC contains path {}, which doesn't appear in spine.",
+                        toc_item.path_without_fragment.display()
+                    )
+                })?;
             if toc_item_spine_index < most_recent_spine_index {
                 return Ok(false);
             } else {
@@ -107,9 +109,9 @@ impl<'a> EpubIndex<'a> {
                     })?
                 }
                 Ordering::Equal => {
-                    let toc_item = spine_associated_toc_items_iter.next().ok_or(anyhow!(
-                        "Unreachable: no next item on peekable iter which peeked to Some."
-                    ))?;
+                    let toc_item = spine_associated_toc_items_iter.next().context(
+                        "Unreachable: no next item on peekable iter which peeked to Some.",
+                    )?;
                     wrap_xml_element_write(writer, XmlEvent::start_element("li"), |writer| {
                         wrap_xml_element_write(
                             writer,
@@ -123,7 +125,7 @@ impl<'a> EpubIndex<'a> {
                         )
                     })?;
                 }
-                Ordering::Greater => break,
+                Ordering::Greater => break, // This branch is currently untested; find a book to make sure it works
             }
         }
         Ok(())
