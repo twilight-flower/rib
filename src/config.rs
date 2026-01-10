@@ -7,6 +7,8 @@ use std::{
 use anyhow::Context;
 use serde::Deserialize;
 
+use crate::helpers::return_true;
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -15,6 +17,10 @@ pub struct Config {
     pub max_library_books: Option<usize>,
     #[serde(default)]
     pub max_library_bytes: Option<u64>,
+    #[serde(default = "return_true")]
+    pub include_index: bool,
+    #[serde(default = "return_true")]
+    pub inject_navigation: bool,
     // Stylesheets
 }
 
@@ -22,7 +28,7 @@ impl Default for Config {
     fn default() -> Self {
         // Can't use anyhow here because default method doesn't support result return; stability here should be guaranteed through tests instead
         static DEFAULT_CONFIG: LazyLock<Config> = LazyLock::new(|| {
-            toml::from_str(Config::DEFAULT_STRING)
+            toml::from_str(Config::DEFAULT_STR)
                 .expect("Internal error: failed to deserialize default config.")
         });
         DEFAULT_CONFIG.clone()
@@ -30,14 +36,14 @@ impl Default for Config {
 }
 
 impl Config {
-    const DEFAULT_STRING: &'static str = include_str!("../assets/default_config.toml");
+    const DEFAULT_STR: &'static str = include_str!("../assets/default_config.toml");
 
     fn write_default(config_file_path: &Path) -> anyhow::Result<()> {
         let config_file_parent_path = config_file_path
             .parent()
             .context("Internal error: tried to write default config file to root.")?;
         match create_dir_all(&config_file_parent_path) {
-            Ok(_) => match write(&config_file_path, Self::DEFAULT_STRING) {
+            Ok(_) => match write(&config_file_path, Self::DEFAULT_STR) {
                 Ok(_) => (),
                 Err(_) => println!(
                     "Warning: failed to write default config file to {}.",

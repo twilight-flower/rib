@@ -13,4 +13,17 @@
 # max_library_books = 100
 max_library_bytes = 1_000_000 # 100 MB
 
+### By default, when a book is opened in rib, it will include an index page
+### with links to all the book's sections and table-of-contents-entries. This
+### can be disabled by setting include_index to false.
+
+# include_index = false
+
+### By default, when a book is opened in rib, it will include a navigation
+### interface around each of its sections, with links to the next section,
+### previous section, and (if generated) index. This can be disabled by setting
+### inject_navigation to false.
+
+# inject_navigation = false
+
 ### TODO: stylesheets, including index-generation and navigation-injection

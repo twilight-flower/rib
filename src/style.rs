@@ -26,6 +26,20 @@ impl Style {
         }
     }
 
+    pub fn include_index(self, include_index: bool) -> Self {
+        Self {
+            include_index,
+            ..self
+        }
+    }
+
+    pub fn inject_navigation(self, inject_navigation: bool) -> Self {
+        Self {
+            inject_navigation,
+            ..self
+        }
+    }
+
     pub fn get_default_hash(&self) -> u64 {
         let mut default_hasher = DefaultHasher::new();
         self.hash(&mut default_hasher);

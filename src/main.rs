@@ -18,6 +18,25 @@ use crate::{book::open_books, config::Config, library::Library, style::Style};
 //   Args   //
 //////////////
 
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
+/// print path to config file
+#[argh(subcommand, name = "path")]
+struct ConfigPathArgs {}
+
+#[derive(Clone, Debug, FromArgs, ArgsInfo)]
+#[argh(subcommand)]
+enum ConfigSubcommand {
+    Path(ConfigPathArgs),
+}
+
+#[derive(Clone, Debug, FromArgs, ArgsInfo)]
+/// interact with rib's configuration
+#[argh(subcommand, name = "config")]
+struct ConfigArgs {
+    #[argh(subcommand)]
+    subcommand: ConfigSubcommand,
+}
+
 #[derive(Clone, Debug, FromArgs, ArgsInfo)]
 /// clear books from library
 #[argh(subcommand, name = "clear")]
@@ -43,11 +62,17 @@ struct LibraryListArgs {
     // Empty for now; later on, add option for a more machine-readable output, and maybe store more metadata in the library so the machines and/or nonmachines can filter on more information
 }
 
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
+/// print path to library directory
+#[argh(subcommand, name = "path")]
+struct LibraryPathArgs {}
+
 #[derive(Clone, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
 enum LibrarySubcommand {
     Clear(LibraryClearArgs),
     List(LibraryListArgs),
+    Path(LibraryPathArgs),
 }
 
 #[derive(Clone, Debug, FromArgs, ArgsInfo)]
@@ -61,6 +86,7 @@ struct LibraryArgs {
 #[derive(Clone, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
 enum ArgsSubcommand {
+    Config(ConfigArgs),
     Library(LibraryArgs),
 } // Placeholder
 
@@ -76,8 +102,9 @@ struct Args {
     #[argh(option, short = 'b')]
     /// command to open book with (default: system default web browser)
     browser: Option<String>,
+    // Plausibly add options to control index and navigation inclusion/exclusion individually here, in addition to or instead of the 'raw' shorthand and the config file
     #[argh(switch, short = 'r')]
-    /// open raw book without index or stylesheets
+    /// open raw book without index or navigation or stylesheets
     raw: bool,
 }
 
@@ -95,10 +122,13 @@ fn main() -> anyhow::Result<()> {
     let config = Config::open(&config_path)?;
 
     let library_path = project_dirs.data_local_dir().join("library");
-    let mut library = Library::open(library_path)?;
+    let mut library = Library::open(library_path.clone())?;
 
     match args.subcommand {
         Some(subcommand) => match subcommand {
+            ArgsSubcommand::Config(config_args) => match config_args.subcommand {
+                ConfigSubcommand::Path(_) => Ok(println!("{}", config_path.display())),
+            },
             ArgsSubcommand::Library(library_args) => match library_args.subcommand {
                 LibrarySubcommand::Clear(library_clear_args) => match library_clear_args.all {
                     true => library.clear(Some(0), None, &[]),
@@ -109,6 +139,7 @@ fn main() -> anyhow::Result<()> {
                     ),
                 },
                 LibrarySubcommand::List(_) => library.list(),
+                LibrarySubcommand::Path(_) => Ok(println!("{}", library_path.display())),
             },
         },
         None => match args.paths.len() {
@@ -137,7 +168,11 @@ fn main() -> anyhow::Result<()> {
                 let styles = match args.raw {
                     // Once we want user-specified styling support we'll need more here. Make sure the vec is always nonempty: if the user runs the specify-style flag and then specifies empty-set-of-styles, use default as if it's unspecified
                     true => vec![Style::raw()],
-                    false => vec![Style::default()],
+                    false => vec![
+                        Style::default()
+                            .include_index(config.include_index)
+                            .inject_navigation(config.inject_navigation),
+                    ],
                 };
                 open_books(
                     &mut library,
