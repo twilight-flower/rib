@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serializer, de::Error as DeserializeError};
+use serde::{Deserialize, Deserializer, Serializer, de::Error};
 use xml::{
     EventWriter,
     writer::{XmlEvent, events::StartElementBuilder},

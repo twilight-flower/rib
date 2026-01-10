@@ -1,13 +1,11 @@
 use std::{
-    fs::{create_dir_all, read_to_string, write},
-    path::Path,
-    sync::LazyLock,
+    collections::HashMap, fs::{create_dir_all, read_to_string, write}, path::Path, sync::LazyLock
 };
 
 use anyhow::Context;
 use serde::Deserialize;
 
-use crate::helpers::return_true;
+use crate::{helpers::return_true, style::Stylesheet};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -21,7 +19,10 @@ pub struct Config {
     pub include_index: bool,
     #[serde(default = "return_true")]
     pub inject_navigation: bool,
-    // Stylesheets
+    #[serde(default)]
+    pub default_stylesheets: Vec<String>,
+    #[serde(default, deserialize_with = "Stylesheet::deserialize_config_map")]
+    pub stylesheets: HashMap<String, Stylesheet>
 }
 
 impl Default for Config {

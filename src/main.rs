@@ -23,13 +23,13 @@ use crate::{book::open_books, config::Config, library::Library, style::Style};
 #[argh(subcommand, name = "path")]
 struct ConfigPathArgs {}
 
-#[derive(Clone, Debug, FromArgs, ArgsInfo)]
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 #[argh(subcommand)]
 enum ConfigSubcommand {
     Path(ConfigPathArgs),
 }
 
-#[derive(Clone, Debug, FromArgs, ArgsInfo)]
+#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
 /// interact with rib's configuration
 #[argh(subcommand, name = "config")]
 struct ConfigArgs {
@@ -168,11 +168,18 @@ fn main() -> anyhow::Result<()> {
                 let styles = match args.raw {
                     // Once we want user-specified styling support we'll need more here. Make sure the vec is always nonempty: if the user runs the specify-style flag and then specifies empty-set-of-styles, use default as if it's unspecified
                     true => vec![Style::raw()],
-                    false => vec![
-                        Style::default()
-                            .include_index(config.include_index)
-                            .inject_navigation(config.inject_navigation),
-                    ],
+                    false => match config.default_stylesheets.is_empty() {
+                        true => vec![Style {
+                            include_index: config.include_index,
+                            inject_navigation: config.inject_navigation,
+                            stylesheet: None,
+                        }],
+                        false => config.default_stylesheets.iter().map(|stylesheet_name| Style {
+                            include_index: config.include_index,
+                            inject_navigation: config.inject_navigation,
+                            stylesheet: config.stylesheets.get(stylesheet_name).cloned(),
+                        }).collect()
+                    },
                 };
                 open_books(
                     &mut library,

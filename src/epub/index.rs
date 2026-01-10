@@ -175,7 +175,7 @@ impl<'a> EpubIndex<'a> {
         Ok(())
     }
 
-    pub fn to_xhtml(&self, epub_info: &EpubInfo, style: Style) -> anyhow::Result<Vec<u8>> {
+    pub fn to_xhtml(&self, epub_info: &EpubInfo, style: &Style) -> anyhow::Result<Vec<u8>> {
         let rendition_contents_dir: PathBuf = match style.uses_raw_contents_dir() {
             true => ["..", "raw"].iter().collect(),
             false => "contents".into(),

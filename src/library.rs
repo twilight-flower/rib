@@ -236,7 +236,7 @@ impl Library {
                             &epub_info.spine_items,
                             &epub_info.table_of_contents,
                         )?;
-                        let index_xhtml = index.to_xhtml(epub_info, *style)?;
+                        let index_xhtml = index.to_xhtml(epub_info, style)?;
                         let index_path_from_library_root =
                             dir_path_from_library_root.join("index.xhtml");
                         let index_path = self.library_path.join(&index_path_from_library_root);

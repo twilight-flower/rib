@@ -26,4 +26,49 @@ max_library_bytes = 1_000_000 # 100 MB
 
 # inject_navigation = false
 
-### TODO: stylesheets, including index-generation and navigation-injection
+### List of stylesheets to automatically apply to a book upon opening it. If
+### the list is empty, no stylesheet will be applied. If the list contains
+### multiple stylesheets, the book will be generated with all of them and will
+### be initially opened with the first one specified.
+
+default_stylesheets = ["default_black"]
+
+### Below: definitions for stylesheets which can be applied to books, including
+### via the default_stylesheets list above and via command-line flag. Each
+### definition is made up of a series of keys whose values map to CSS styles.
+### If any key is unset, its associated styles won't be applied, although books'
+### own stylesheets and browser default styles will still be present.
+###
+### Keys which directly specify book styles:
+###
+### - text_color: CSS color attribute to apply to all book text.
+### - link_color: CSS color attribute to apply to book link text, overriding
+### text_color as needed.
+### - background_color: CSS background-color attribute to apply to book body.
+### - margin_size: CSS left and right margin attribute to apply to book body.
+### - max_image_width: CSS max-width attribute to apply to images in book.
+###
+### Override keys: each direct book-style key has a corresponding override key.
+### text_color_override, link_color_override, et cetera. If an override key is
+### set to true, its associated style will take priority over any stylesheets
+### specified in the book. Otherwise, book stylesheets will take precedence.
+###
+### Each stylesheet is defined by name under the [stylesheets] table:
+### [stylesheets.foo] would define a stylesheet named "foo", for instance.
+
+[stylesheets.default_black]
+	text_color = "white"
+	link_color = "#a8f" # Experiment and see if this should be made lighter
+	background_color = "black"
+	default_mode = "dark"
+	margin_size = "10%"
+	max_image_width = "100%"
+	max_image_width_override = true
+[stylesheets.default_white]
+	text_color = "black"
+	link_color = "#51f" # Experiment and see if this should be made darker
+	background_color = "white"
+	default_mode = "dark"
+	margin_size = "10%"
+	max_image_width = "100%"
+	max_image_width_override = true
