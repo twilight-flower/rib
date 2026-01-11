@@ -1,5 +1,8 @@
 use std::{
-    collections::HashMap, fs::{create_dir_all, read_to_string, write}, path::Path, sync::LazyLock
+    collections::HashMap,
+    fs::{create_dir_all, read_to_string, write},
+    path::Path,
+    sync::LazyLock,
 };
 
 use anyhow::Context;
@@ -22,7 +25,7 @@ pub struct Config {
     #[serde(default)]
     pub default_stylesheets: Vec<String>,
     #[serde(default, deserialize_with = "Stylesheet::deserialize_config_map")]
-    pub stylesheets: HashMap<String, Stylesheet>
+    pub stylesheets: HashMap<String, Stylesheet>,
 }
 
 impl Default for Config {

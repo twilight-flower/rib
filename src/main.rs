@@ -1,6 +1,7 @@
 mod book;
 mod browser;
 mod config;
+mod css;
 mod epub;
 mod helpers;
 mod library;
@@ -102,7 +103,7 @@ struct Args {
     #[argh(option, short = 'b')]
     /// command to open book with (default: system default web browser)
     browser: Option<String>,
-    // Plausibly add options to control index and navigation inclusion/exclusion individually here, in addition to or instead of the 'raw' shorthand and the config file
+    // Add options to control index and navigation inclusion/exclusion and stylesheet-selection individually here, in addition to or instead of the 'raw' shorthand and the config file
     #[argh(switch, short = 'r')]
     /// open raw book without index or navigation or stylesheets
     raw: bool,
@@ -174,11 +175,15 @@ fn main() -> anyhow::Result<()> {
                             inject_navigation: config.inject_navigation,
                             stylesheet: None,
                         }],
-                        false => config.default_stylesheets.iter().map(|stylesheet_name| Style {
-                            include_index: config.include_index,
-                            inject_navigation: config.inject_navigation,
-                            stylesheet: config.stylesheets.get(stylesheet_name).cloned(),
-                        }).collect()
+                        false => config
+                            .default_stylesheets
+                            .iter()
+                            .map(|stylesheet_name| Style {
+                                include_index: config.include_index,
+                                inject_navigation: config.inject_navigation,
+                                stylesheet: config.stylesheets.get(stylesheet_name).cloned(),
+                            })
+                            .collect(),
                     },
                 };
                 open_books(

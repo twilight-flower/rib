@@ -137,6 +137,14 @@ pub fn write_xml_characters<W: Write>(
     Ok(())
 }
 
+/////////////
+//   css   //
+/////////////
+
+pub fn tabs(indentation: usize) -> String {
+    std::iter::repeat('\t').take(indentation).collect()
+}
+
 /////////////////
 //   linking   //
 /////////////////

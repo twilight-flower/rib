@@ -248,7 +248,7 @@ impl Library {
                         })?;
 
                         // Index stylesheet will need to be generated more dynamically once we've got user-supplied styling enabled
-                        let index_stylesheet = crate::epub::index::generate_stylesheet(style);
+                        let index_stylesheet = crate::epub::index::generate_stylesheet(style)?;
                         let index_stylesheet_path = dir_path.join("index_styles.css");
                         write(&index_stylesheet_path, index_stylesheet).with_context(|| {
                             format!(

@@ -60,15 +60,13 @@ default_stylesheets = ["default_black"]
 	text_color = "white"
 	link_color = "#a8f" # Experiment and see if this should be made lighter
 	background_color = "black"
-	default_mode = "dark"
 	margin_size = "10%"
 	max_image_width = "100%"
 	max_image_width_override = true
 [stylesheets.default_white]
 	text_color = "black"
-	link_color = "#51f" # Experiment and see if this should be made darker
+	link_color = "#51f"
 	background_color = "white"
-	default_mode = "dark"
 	margin_size = "10%"
 	max_image_width = "100%"
 	max_image_width_override = true

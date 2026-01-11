@@ -1,11 +1,14 @@
-use std::{collections::HashMap, hash::{DefaultHasher, Hash, Hasher}};
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct StylesheetValue {
-    value: String,
-    override_book: bool,
+    pub value: String,
+    pub override_book: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -33,23 +36,23 @@ impl Into<Stylesheet> for RawStylesheet {
         Stylesheet {
             text_color: self.text_color.map(|color| StylesheetValue {
                 value: color,
-                override_book: self.text_color_override
+                override_book: self.text_color_override,
             }),
             link_color: self.link_color.map(|color| StylesheetValue {
                 value: color,
-                override_book: self.link_color_override
+                override_book: self.link_color_override,
             }),
             background_color: self.background_color.map(|color| StylesheetValue {
                 value: color,
-                override_book: self.background_color_override
+                override_book: self.background_color_override,
             }),
             margin_size: self.margin_size.map(|color| StylesheetValue {
                 value: color,
-                override_book: self.margin_size_override
+                override_book: self.margin_size_override,
             }),
             max_image_width: self.max_image_width.map(|color| StylesheetValue {
                 value: color,
-                override_book: self.max_image_width_override
+                override_book: self.max_image_width_override,
             }),
         }
     }
@@ -69,7 +72,10 @@ impl Stylesheet {
         deserializer: D,
     ) -> Result<HashMap<String, Self>, D::Error> {
         let raw_config_map = HashMap::<String, RawStylesheet>::deserialize(deserializer)?;
-        Ok(raw_config_map.into_iter().map(|(name, raw_stylesheet)| (name, raw_stylesheet.into())).collect())
+        Ok(raw_config_map
+            .into_iter()
+            .map(|(name, raw_stylesheet)| (name, raw_stylesheet.into()))
+            .collect())
     }
 }
 
@@ -107,5 +113,40 @@ impl Style {
 
     pub fn uses_raw_contents_dir(&self) -> bool {
         !self.inject_navigation || self.stylesheet.is_some()
+    }
+
+    pub fn text_color(&self) -> Option<&StylesheetValue> {
+        self.stylesheet
+            .as_ref()
+            .map(|stylesheet| stylesheet.text_color.as_ref())
+            .flatten()
+    }
+
+    pub fn link_color(&self) -> Option<&StylesheetValue> {
+        self.stylesheet
+            .as_ref()
+            .map(|stylesheet| stylesheet.link_color.as_ref())
+            .flatten()
+    }
+
+    pub fn background_color(&self) -> Option<&StylesheetValue> {
+        self.stylesheet
+            .as_ref()
+            .map(|stylesheet| stylesheet.background_color.as_ref())
+            .flatten()
+    }
+
+    pub fn margin_size(&self) -> Option<&StylesheetValue> {
+        self.stylesheet
+            .as_ref()
+            .map(|stylesheet| stylesheet.margin_size.as_ref())
+            .flatten()
+    }
+
+    pub fn max_image_width(&self) -> Option<&StylesheetValue> {
+        self.stylesheet
+            .as_ref()
+            .map(|stylesheet| stylesheet.max_image_width.as_ref())
+            .flatten()
     }
 }

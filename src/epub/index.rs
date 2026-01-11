@@ -9,6 +9,7 @@ use itertools::Itertools;
 use xml::{EventWriter, writer::XmlEvent};
 
 use crate::{
+    css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, EpubSpineItem, EpubTocItem},
     helpers::{
         unwrap_path_utf8, wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
@@ -439,27 +440,77 @@ impl<'a> EpubIndex<'a> {
     }
 }
 
-pub fn generate_stylesheet(_style: &Style) -> String {
-    r#"
-body {
-	text-align: center;
+fn generate_stylesheet_body_block(style: &Style) -> CssBlock {
+    let mut block_contents = vec![CssBlockContents::line("text-align: center;")];
+
+    if let Some(color) = style.text_color() {
+        block_contents.push(CssBlockContents::line(format!("color: {};", color.value)));
+    }
+    if let Some(color) = style.background_color() {
+        block_contents.push(CssBlockContents::line(format!(
+            "background-color: {};",
+            color.value
+        )));
+    }
+    if let Some(margin) = style.margin_size() {
+        block_contents.extend_from_slice(&[
+            CssBlockContents::line(format!("margin-left: {};", margin.value)),
+            CssBlockContents::line(format!("margin-right: {};", margin.value)),
+        ]);
+    }
+
+    CssBlock::new("body", block_contents)
 }
 
-table {
-	border-collapse: collapse;
-	margin-left: auto;
-	margin-right: auto;
+fn generate_stylesheet_td_block(style: &Style) -> CssBlock {
+    let border_line_text_color = match style.text_color() {
+        Some(color) => &color.value,
+        None => "black",
+    };
+    CssBlock::new(
+        "td",
+        vec![
+            CssBlockContents::line(format!("border: 1px solid {border_line_text_color};")),
+            CssBlockContents::line("vertical-align: top;"),
+        ],
+    )
 }
 
-td {
-	border: 1px solid black;
-	vertical-align: top;
+fn generate_stylesheet_link_block(style: &Style) -> CssBlock {
+    let block_contents = match style.link_color() {
+        Some(color) => vec![CssBlockContents::line(format!("color: {};", color.value))],
+        None => Vec::new(),
+    };
+    CssBlock::new("*:any-link", block_contents)
 }
 
-ul {
-	text-align: left;
+fn generate_stylesheet_img_block(style: &Style) -> CssBlock {
+    let block_contents = match style.max_image_width() {
+        Some(width) => vec![CssBlockContents::line(format!(
+            "max-width: {};",
+            width.value
+        ))],
+        None => Vec::new(),
+    };
+    CssBlock::new("img", block_contents)
 }
-"#
-    .trim_start()
+
+pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
+    Ok(CssFile::new(vec![
+        generate_stylesheet_body_block(style),
+        CssBlock::new(
+            "table",
+            vec![
+                CssBlockContents::line("border-collapse: collapse;"),
+                CssBlockContents::line("margin-left: auto;"),
+                CssBlockContents::line("margin-right: auto;"),
+            ],
+        ),
+        generate_stylesheet_td_block(style),
+        CssBlock::new("ul", vec![CssBlockContents::line("text-align: left;")]),
+        generate_stylesheet_link_block(style),
+        generate_stylesheet_img_block(style),
+    ])
     .to_string()
+    .context("Internal error: index CSS file was None.")?)
 }
