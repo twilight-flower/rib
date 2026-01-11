@@ -12,7 +12,8 @@ use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, EpubSpineItem, EpubTocItem},
     helpers::{
-        unwrap_path_utf8, wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        generate_stylesheet_img_block, generate_stylesheet_link_block, unwrap_path_utf8,
+        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
     },
     style::Style,
 };
@@ -463,36 +464,17 @@ fn generate_stylesheet_body_block(style: &Style) -> CssBlock {
 }
 
 fn generate_stylesheet_td_block(style: &Style) -> CssBlock {
-    let border_line_text_color = match style.text_color() {
+    let border_color = match style.text_color() {
         Some(color) => &color.value,
         None => "black",
     };
     CssBlock::new(
         "td",
         vec![
-            CssBlockContents::line(format!("border: 1px solid {border_line_text_color};")),
+            CssBlockContents::line(format!("border: 1px solid {border_color};")),
             CssBlockContents::line("vertical-align: top;"),
         ],
     )
-}
-
-fn generate_stylesheet_link_block(style: &Style) -> CssBlock {
-    let block_contents = match style.link_color() {
-        Some(color) => vec![CssBlockContents::line(format!("color: {};", color.value))],
-        None => Vec::new(),
-    };
-    CssBlock::new("*:any-link", block_contents)
-}
-
-fn generate_stylesheet_img_block(style: &Style) -> CssBlock {
-    let block_contents = match style.max_image_width() {
-        Some(width) => vec![CssBlockContents::line(format!(
-            "max-width: {};",
-            width.value
-        ))],
-        None => Vec::new(),
-    };
-    CssBlock::new("img", block_contents)
 }
 
 pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
@@ -512,5 +494,5 @@ pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
         generate_stylesheet_img_block(style),
     ])
     .to_string()
-    .context("Internal error: index CSS file was None.")?)
+    .context("Internal error: failed to generate index stylesheet.")?)
 }

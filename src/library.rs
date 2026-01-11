@@ -218,7 +218,8 @@ impl Library {
                         )?;
                     }
 
-                    let navigation_stylesheet = crate::epub::navigation::generate_stylesheet(style);
+                    let navigation_stylesheet =
+                        crate::epub::navigation::generate_stylesheet(style)?;
                     let navigation_stylesheet_path = dir_path.join("navigation_styles.css");
                     write(&navigation_stylesheet_path, navigation_stylesheet).with_context(
                         || {

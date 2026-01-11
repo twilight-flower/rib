@@ -5,9 +5,11 @@ use pathdiff::diff_paths;
 use xml::{EmitterConfig, writer::XmlEvent};
 
 use crate::{
+    css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, EpubSpineItem},
     helpers::{
-        unwrap_path_utf8, wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        generate_stylesheet_img_block, generate_stylesheet_link_block, unwrap_path_utf8,
+        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
     },
     style::Style,
 };
@@ -233,52 +235,114 @@ pub fn create_navigation_wrapper(
     Ok(navigation_wrapper_buffer_writer.into_inner())
 }
 
-pub fn generate_stylesheet(_style: &Style) -> String {
-    r#"
-body {
-	margin: 0;
-	padding: 0;
-	height: 100vh;
-	width: 100vw;
-	overflow: hidden;
+fn generate_stylesheet_body_block(style: &Style) -> CssBlock {
+    let mut block_contents = vec![
+        CssBlockContents::line("margin: 0;"),
+        CssBlockContents::line("padding: 0;"),
+        CssBlockContents::line("height: 100vh;"),
+        CssBlockContents::line("width: 100vw;"),
+        CssBlockContents::line("overflow: hidden;"),
+    ];
+
+    if let Some(color) = style.text_color() {
+        block_contents.push(CssBlockContents::line(format!("color: {};", color.value)));
+    }
+    if let Some(color) = style.background_color() {
+        block_contents.push(CssBlockContents::line(format!(
+            "background-color: {};",
+            color.value
+        )));
+    }
+
+    CssBlock::new("body", block_contents)
 }
 
-#section {
-	border: none;
-	height: 100%;
-	width: 100%;
+fn generate_stylesheet_navigation_block(style: &Style) -> CssBlock {
+    let (left_and_right_position, width) = match style.margin_size() {
+        Some(size) => (
+            format!("calc(5vh + {})", size.value),
+            format!(
+                "calc(100vw - calc(10vh + 2.5rem + calc(2 * {})))",
+                size.value
+            ),
+        ),
+        None => (
+            "5vh".to_string(),
+            "calc(100vw - calc(10vh + 2.5rem))".to_string(),
+        ),
+    };
+
+    let border_color = match style.text_color() {
+        Some(color) => &color.value,
+        None => "black",
+    };
+
+    let background_color = match style.background_color() {
+        Some(color) => &color.value,
+        None => "white",
+    };
+
+    CssBlock::new(
+        "#navigation",
+        vec![
+            // Position
+            // Maybe drop specifying right position? It's possibly redundant
+            CssBlockContents::line("position: fixed;"),
+            CssBlockContents::line("bottom: 5vh;"),
+            CssBlockContents::line(format!("left: {left_and_right_position};")),
+            CssBlockContents::line(format!("right: {left_and_right_position};")),
+            CssBlockContents::line(format!("width: {width};")),
+            // Style
+            CssBlockContents::line("padding: 1rem;"),
+            CssBlockContents::line(format!("border: 0.25rem solid {border_color};")),
+            CssBlockContents::line("border-radius: 2rem;"),
+            CssBlockContents::line(format!("background: {background_color};")),
+            // Contents style
+            CssBlockContents::line("text-align: center;"),
+            // Hide when not in use
+            CssBlockContents::line("opacity: 0;"),
+            CssBlockContents::line("transition: opacity 0.4s ease-out;"),
+        ],
+    )
 }
 
-#navigation {
-	position: fixed;
-	bottom: 5vh;
-	left: 5vh;
-	right: 5vh;
-	width: calc(100vw - calc(10vh + 2.5rem));
-
-	padding: 1rem;
-	border: 0.25rem solid black;
-	border-radius: 2rem;
-	background: white;
-
-	text-align: center;
-
-	opacity: 0;
-	transition: opacity 0.4s ease-out;
+fn generate_stylesheet_navigation_button_block(style: &Style) -> CssBlock {
+    let border_color = match style.text_color() {
+        Some(color) => &color.value,
+        None => "black",
+    };
+    CssBlock::new(
+        ".navigation-button",
+        vec![
+            CssBlockContents::line("padding: 0.1rem;"),
+            CssBlockContents::line(format!("border: 0.1rem solid {border_color};")),
+            CssBlockContents::line("border-radius: 0.2rem;"),
+            CssBlockContents::line("text-decoration: none;"),
+            // Maybe also make the text color consistent? Dunno; TBD
+        ],
+    )
 }
 
-#navigation:hover {
-	opacity: 1;
-}
-
-.navigation-button {
-	padding: 0.1rem;
-	border: 0.1rem solid black;
-	border-radius: 0.2rem;
-	text-decoration: none;
-	/* Maybe also make the text color consistent? Dunno; TBD */
-}
-"#
-    .trim_start()
+pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
+    Ok(CssFile::new(vec![
+        generate_stylesheet_body_block(style),
+        CssBlock::new(
+            "#section",
+            vec![
+                CssBlockContents::line("border: none;"),
+                CssBlockContents::line("height: 100%;"),
+                CssBlockContents::line("width: 100%;"),
+            ],
+        ),
+        generate_stylesheet_navigation_block(style),
+        CssBlock::new(
+            "#navigation:hover",
+            vec![CssBlockContents::line("opacity: 1;")],
+        ),
+        generate_stylesheet_navigation_button_block(style),
+        generate_stylesheet_link_block(style),
+        generate_stylesheet_img_block(style),
+    ])
     .to_string()
+    .context("Internal error: failed to generate navigation stylesheet.")?)
 }

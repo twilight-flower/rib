@@ -15,6 +15,11 @@ use xml::{
 #[cfg(not(any(windows, unix)))]
 use anyhow::anyhow;
 
+use crate::{
+    css::{CssBlock, CssBlockContents},
+    style::Style,
+};
+
 ////////////
 //   fs   //
 ////////////
@@ -143,6 +148,25 @@ pub fn write_xml_characters<W: Write>(
 
 pub fn tabs(indentation: usize) -> String {
     std::iter::repeat('\t').take(indentation).collect()
+}
+
+pub fn generate_stylesheet_link_block(style: &Style) -> CssBlock {
+    let block_contents = match style.link_color() {
+        Some(color) => vec![CssBlockContents::line(format!("color: {};", color.value))],
+        None => Vec::new(),
+    };
+    CssBlock::new("*:any-link", block_contents)
+}
+
+pub fn generate_stylesheet_img_block(style: &Style) -> CssBlock {
+    let block_contents = match style.max_image_width() {
+        Some(width) => vec![CssBlockContents::line(format!(
+            "max-width: {};",
+            width.value
+        ))],
+        None => Vec::new(),
+    };
+    CssBlock::new("img", block_contents)
 }
 
 /////////////////
