@@ -167,7 +167,6 @@ fn main() -> anyhow::Result<()> {
                     (None, None) => None,
                 };
                 let styles = match args.raw {
-                    // Once we want user-specified styling support we'll need more here. Make sure the vec is always nonempty: if the user runs the specify-style flag and then specifies empty-set-of-styles, use default as if it's unspecified
                     true => vec![Style::raw()],
                     false => match config.default_stylesheets.is_empty() {
                         true => vec![Style {

@@ -112,7 +112,7 @@ impl Style {
     }
 
     pub fn uses_raw_contents_dir(&self) -> bool {
-        !self.inject_navigation || self.stylesheet.is_some()
+        !(self.inject_navigation || self.stylesheet.is_some())
     }
 
     pub fn text_color(&self) -> Option<&StylesheetValue> {

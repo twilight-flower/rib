@@ -150,15 +150,15 @@ pub fn tabs(indentation: usize) -> String {
     std::iter::repeat('\t').take(indentation).collect()
 }
 
-pub fn generate_stylesheet_link_block(style: &Style) -> CssBlock {
+pub fn generate_stylesheet_link_block_unified(style: &Style) -> CssBlock {
     let block_contents = match style.link_color() {
         Some(color) => vec![CssBlockContents::line(format!("color: {};", color.value))],
         None => Vec::new(),
     };
-    CssBlock::new("*:any-link", block_contents)
+    CssBlock::new(":any-link", block_contents)
 }
 
-pub fn generate_stylesheet_img_block(style: &Style) -> CssBlock {
+pub fn generate_stylesheet_img_block_unified(style: &Style) -> CssBlock {
     let block_contents = match style.max_image_width() {
         Some(width) => vec![CssBlockContents::line(format!(
             "max-width: {};",

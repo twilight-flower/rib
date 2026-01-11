@@ -12,8 +12,8 @@ use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, EpubSpineItem, EpubTocItem},
     helpers::{
-        generate_stylesheet_img_block, generate_stylesheet_link_block, unwrap_path_utf8,
-        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        generate_stylesheet_img_block_unified, generate_stylesheet_link_block_unified,
+        unwrap_path_utf8, wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
     },
     style::Style,
 };
@@ -207,7 +207,6 @@ impl<'a> EpubIndex<'a> {
                         write_xml_characters(writer, &format!("rib | {} | Index", epub_info.title))
                     })?;
                     wrap_xml_element_write(
-                        // May need modding once userstyles are more a thing
                         writer,
                         XmlEvent::start_element("link")
                             .attr("rel", "stylesheet")
@@ -490,8 +489,8 @@ pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
         ),
         generate_stylesheet_td_block(style),
         CssBlock::new("ul", vec![CssBlockContents::line("text-align: left;")]),
-        generate_stylesheet_link_block(style),
-        generate_stylesheet_img_block(style),
+        generate_stylesheet_link_block_unified(style),
+        generate_stylesheet_img_block_unified(style),
     ])
     .to_string()
     .context("Internal error: failed to generate index stylesheet.")?)

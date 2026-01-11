@@ -1,15 +1,114 @@
 use std::{fs::read, io::Cursor, ops::IndexMut, path::Path, str::FromStr};
 
 use anyhow::Context;
+use pathdiff::diff_paths;
 use url::Url;
-use xml::EmitterConfig;
+use xml::{EmitterConfig, reader::XmlEvent};
 
 use crate::{
+    css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, navigation::create_navigation_wrapper},
+    helpers::{unwrap_path_utf8, wrap_xml_element_write},
     style::Style,
 };
 
-fn adjust_xhtml_source(source_path: &Path, style: &Style) -> anyhow::Result<Vec<u8>> {
+fn generate_stylesheet_body_block(style: &Style, override_book: bool) -> CssBlock {
+    let (selector, importance) = match override_book {
+        true => ("body", " !important"),
+        false => (":where(body)", ""),
+    };
+    let mut block_contents = Vec::new();
+
+    if let Some(color) = style.text_color()
+        && color.override_book == override_book
+    {
+        block_contents.push(CssBlockContents::line(format!(
+            "color: {}{importance};",
+            color.value
+        )));
+    }
+    if let Some(color) = style.background_color()
+        && color.override_book == override_book
+    {
+        block_contents.push(CssBlockContents::line(format!(
+            "background-color: {}{importance};",
+            color.value
+        )));
+    }
+    if let Some(margin) = style.margin_size()
+        && margin.override_book == override_book
+    {
+        block_contents.extend_from_slice(&[
+            CssBlockContents::line(format!("margin-left: {}{importance};", margin.value)),
+            CssBlockContents::line(format!("margin-right: {}{importance};", margin.value)),
+        ]);
+    }
+
+    CssBlock::new(selector, block_contents)
+}
+
+fn generate_stylesheet_link_block(style: &Style, override_book: bool) -> CssBlock {
+    match style.link_color() {
+        Some(color) if color.override_book == override_book => match override_book {
+            true => CssBlock::new(
+                ":any-link",
+                vec![CssBlockContents::line(format!(
+                    "color: {} !important;",
+                    color.value
+                ))],
+            ),
+            false => CssBlock::new(
+                ":where(:any-link)",
+                vec![CssBlockContents::line(format!("color: {};", color.value))],
+            ),
+        },
+        _ => CssBlock::empty(),
+    }
+}
+
+pub fn generate_stylesheet_img_block(style: &Style, override_book: bool) -> CssBlock {
+    match style.max_image_width() {
+        Some(width) if width.override_book == override_book => match override_book {
+            true => CssBlock::new(
+                "img",
+                vec![CssBlockContents::line(format!(
+                    "max-width: {} !important;",
+                    width.value
+                ))],
+            ),
+            false => CssBlock::new(
+                ":where(img)",
+                vec![CssBlockContents::line(format!(
+                    "max-width: {};",
+                    width.value
+                ))],
+            ),
+        },
+        _ => CssBlock::empty(),
+    }
+}
+
+pub fn generate_stylesheets(style: &Style) -> (Option<String>, Option<String>) {
+    let no_override_sheet = CssFile::new(vec![
+        generate_stylesheet_body_block(style, false),
+        generate_stylesheet_link_block(style, false),
+        generate_stylesheet_img_block(style, false),
+    ]);
+    let override_sheet = CssFile::new(vec![
+        generate_stylesheet_body_block(style, true),
+        generate_stylesheet_link_block(style, true),
+        generate_stylesheet_img_block(style, true),
+    ]);
+    (no_override_sheet.to_string(), override_sheet.to_string())
+}
+
+fn adjust_xhtml_source(
+    source_path: &Path,
+    destination_path: &Path,
+    no_override_stylesheet_path: Option<&Path>,
+    override_stylesheet_path: Option<&Path>,
+    style: &Style,
+) -> anyhow::Result<Vec<u8>> {
     let source_file =
         read(source_path).with_context(|| format!("Failed to read {}.", source_path.display()))?;
     let reader = xml::ParserConfig::new()
@@ -30,9 +129,14 @@ fn adjust_xhtml_source(source_path: &Path, style: &Style) -> anyhow::Result<Vec<
         false => "_self",
     };
 
+    let destination_path_parent = destination_path
+        .parent()
+        .context("Internal error: attempted to adjust XHTML with root as its destination path.")?;
+    // Note: we use `destination_path_parent`, not `destination_path`, as base for relative stylesheet-links, because `diff_paths` assumes all its paths are dirs rather than files and so adds an extra `..` component relative to the path-logic that XHTML operates under.
+
     for event in reader {
         match event.context("XML parse failure.")? {
-            xml::reader::XmlEvent::StartElement {
+            XmlEvent::StartElement {
                 name,
                 mut attributes,
                 namespace,
@@ -81,17 +185,100 @@ fn adjust_xhtml_source(source_path: &Path, style: &Style) -> anyhow::Result<Vec<
                         }
                     }
                 }
-                let reader_event_rebuilt = xml::reader::XmlEvent::StartElement {
+                let reader_event_rebuilt = XmlEvent::StartElement {
                     name,
                     attributes,
                     namespace,
                 };
                 let writer_event = reader_event_rebuilt.as_writer_event().context(
-                    "Internal error: failed to convert reader StartElement event to writer format.",
+                    "Internal error: failed to convert reader <a> StartElement event to writer format.",
                 )?;
                 adjusted_source_buffer_writer
                     .write(writer_event)
                     .context("Failed to write updated <a> element XML to new buffer.")?;
+            }
+            XmlEvent::StartElement {
+                name,
+                attributes,
+                namespace,
+            } if name.local_name == "head"
+                && name
+                    .namespace
+                    .as_ref()
+                    .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml")
+                && no_override_stylesheet_path.is_some() =>
+            {
+                // Inject no-override styles at start of head if they exist
+                let stylesheet_path_absolute = no_override_stylesheet_path.context(
+                    "Unreachable: no-override stylesheet path is Some but can't be unwrapped.",
+                )?;
+                let stylesheet_path_relative =
+                    diff_paths(stylesheet_path_absolute, destination_path_parent).with_context(
+                        || {
+                            format!(
+                                "Internal error: failed to generate path from {} to {}.",
+                                destination_path_parent.display(),
+                                stylesheet_path_absolute.display()
+                            )
+                        },
+                    )?;
+
+                let reader_event_rebuilt = XmlEvent::StartElement {
+                    name,
+                    attributes,
+                    namespace,
+                };
+                let writer_event = reader_event_rebuilt.as_writer_event().context(
+                    "Internal error: failed to convert reader <head> StartElement event to writer format.",
+                )?;
+                adjusted_source_buffer_writer
+                    .write(writer_event)
+                    .context("Failed to write <head> element XML to new buffer.")?;
+                wrap_xml_element_write(
+                    &mut adjusted_source_buffer_writer,
+                    xml::writer::events::XmlEvent::start_element("link")
+                        .attr("rel", "stylesheet")
+                        .attr("href", unwrap_path_utf8(&stylesheet_path_relative)?),
+                    |_writer| Ok(()),
+                )?;
+            }
+            XmlEvent::EndElement { name }
+                if name.local_name == "head"
+                    && name
+                        .namespace
+                        .as_ref()
+                        .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml")
+                    && override_stylesheet_path.is_some() =>
+            {
+                // Inject override styles at end of head if they exist
+                let stylesheet_path_absolute = override_stylesheet_path.context(
+                    "Unreachable: override stylesheet path is Some but can't be unwrapped.",
+                )?;
+                let stylesheet_path_relative =
+                    diff_paths(stylesheet_path_absolute, destination_path_parent).with_context(
+                        || {
+                            format!(
+                                "Internal error: failed to generate path from {} to {}.",
+                                destination_path_parent.display(),
+                                stylesheet_path_absolute.display()
+                            )
+                        },
+                    )?;
+
+                wrap_xml_element_write(
+                    &mut adjusted_source_buffer_writer,
+                    xml::writer::events::XmlEvent::start_element("link")
+                        .attr("rel", "stylesheet")
+                        .attr("href", unwrap_path_utf8(&stylesheet_path_relative)?),
+                    |_writer| Ok(()),
+                )?;
+                let reader_event_rebuilt = XmlEvent::EndElement { name };
+                let writer_event = reader_event_rebuilt.as_writer_event().context(
+                    "Internal error: failed to convert reader </head> EndElement event to writer format.",
+                )?;
+                adjusted_source_buffer_writer
+                    .write(writer_event)
+                    .context("Failed to write </head> element XML to new buffer.")?;
             }
             other_reader_event => {
                 // For otherwise-unmarked reader events, transcribe them unchanged
@@ -112,10 +299,18 @@ pub fn adjust_spine_xhtml(
     contents_dir_path: &Path,
     source_path: &Path,
     destination_path: &Path,
+    no_override_stylesheet_path: Option<&Path>,
+    override_stylesheet_path: Option<&Path>,
     spine_index: usize,
     style: &Style,
 ) -> anyhow::Result<Vec<u8>> {
-    let adjusted_source = adjust_xhtml_source(source_path, style);
+    let adjusted_source = adjust_xhtml_source(
+        source_path,
+        destination_path,
+        no_override_stylesheet_path,
+        override_stylesheet_path,
+        style,
+    );
     match style.inject_navigation {
         true => {
             let adjusted_source_string =

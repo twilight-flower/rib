@@ -13,7 +13,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    epub::{EpubInfo, EpubRenditionInfo, index::EpubIndex, xhtml::adjust_spine_xhtml},
+    epub::{EpubInfo, EpubRenditionInfo, index::EpubIndex, xhtml},
     helpers::{create_link, get_dir_size},
     style::Style,
 };
@@ -165,12 +165,42 @@ impl Library {
                 create_dir_all(&dir_path)
                     .context("Couldn't create rendition directory for new style.")?;
 
-                if style.inject_navigation {
-                    // Will also need to branch on stylesheet stuff later
+                if !style.uses_raw_contents_dir() {
                     let raw_rendition_path = self
                         .library_path
                         .join(&epub_info.raw_rendition.dir_path_from_library_root);
                     let contents_dir = dir_path.join("contents");
+
+                    let (no_override_stylesheet, override_stylesheet) =
+                        xhtml::generate_stylesheets(style);
+
+                    let no_override_stylesheet_path = match no_override_stylesheet {
+                        Some(sheet) => {
+                            let path = dir_path.join("section_styles_without_override.css");
+                            write(&path, sheet).with_context(|| {
+                                format!(
+                                    "Failed to write rendition no-override stylesheet to {}.",
+                                    path.display()
+                                )
+                            })?;
+                            Some(path)
+                        }
+                        None => None,
+                    };
+
+                    let override_stylesheet_path = match override_stylesheet {
+                        Some(sheet) => {
+                            let path = dir_path.join("section_styles_with_override.css");
+                            write(&path, sheet).with_context(|| {
+                                format!(
+                                    "Failed to write rendition override stylesheet to {}.",
+                                    path.display()
+                                )
+                            })?;
+                            Some(path)
+                        }
+                        None => None,
+                    };
 
                     for resource_path in &epub_info.nonspine_resource_paths {
                         let resource_link_path = contents_dir.join(resource_path);
@@ -191,11 +221,13 @@ impl Library {
                         // Todo: add support for SVG spine items
                         let raw_spine_item_path = raw_rendition_path.join(&spine_item.path);
                         let modified_spine_item_path = contents_dir.join(&spine_item.path);
-                        let modified_spine_item_xhtml = adjust_spine_xhtml(
+                        let modified_spine_item_xhtml = xhtml::adjust_spine_xhtml(
                             &epub_info,
                             &contents_dir,
                             &raw_spine_item_path,
                             &modified_spine_item_path,
+                            no_override_stylesheet_path.as_deref(),
+                            override_stylesheet_path.as_deref(),
                             index,
                             style,
                         )?;
@@ -248,7 +280,6 @@ impl Library {
                             )
                         })?;
 
-                        // Index stylesheet will need to be generated more dynamically once we've got user-supplied styling enabled
                         let index_stylesheet = crate::epub::index::generate_stylesheet(style)?;
                         let index_stylesheet_path = dir_path.join("index_styles.css");
                         write(&index_stylesheet_path, index_stylesheet).with_context(|| {

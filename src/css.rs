@@ -2,7 +2,7 @@ use itertools::Itertools;
 
 use crate::helpers::tabs;
 
-// This is not a complete CSS serializer. But it's good enough for project needs.
+// This is not a rigorous or complete CSS serializer. But it's good enough for project needs.
 
 #[derive(Clone, Debug)]
 pub enum CssBlockContents {
@@ -15,9 +15,9 @@ impl CssBlockContents {
         Self::Line(contents.into())
     }
 
-    pub fn block(contents: CssBlock) -> Self {
-        Self::Block(contents)
-    }
+    // pub fn block(contents: CssBlock) -> Self {
+    //     Self::Block(contents)
+    // }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -34,6 +34,13 @@ pub struct CssBlock {
 }
 
 impl CssBlock {
+    pub fn empty() -> Self {
+        Self {
+            prefix: String::new(),
+            contents: Vec::new(),
+        }
+    }
+
     pub fn new<S: Into<String>>(prefix: S, contents: Vec<CssBlockContents>) -> Self {
         Self {
             prefix: prefix.into(),
@@ -105,15 +112,14 @@ impl CssFile {
     }
 
     pub fn to_string(&self) -> Option<String> {
-        match self.blocks.is_empty() {
+        let nonempty_block_strings = self
+            .blocks
+            .iter()
+            .filter_map(|block| block.to_string(0))
+            .collect_vec();
+        match nonempty_block_strings.is_empty() {
             true => None,
-            false => Some(format!(
-                "{}\n",
-                self.blocks
-                    .iter()
-                    .filter_map(|block| block.to_string(0))
-                    .join("\n\n")
-            )),
+            false => Some(format!("{}\n", nonempty_block_strings.iter().join("\n\n"))),
         }
     }
 }

@@ -8,8 +8,8 @@ use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, EpubSpineItem},
     helpers::{
-        generate_stylesheet_img_block, generate_stylesheet_link_block, unwrap_path_utf8,
-        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        generate_stylesheet_img_block_unified, generate_stylesheet_link_block_unified,
+        unwrap_path_utf8, wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
     },
     style::Style,
 };
@@ -106,7 +106,6 @@ pub fn create_navigation_wrapper(
                     write_xml_characters(writer, &format!("rib | {}", epub_info.title))
                 })?;
                 wrap_xml_element_write(
-                    // May need modding once userstyles are more a thing
                     writer,
                     XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
@@ -259,11 +258,11 @@ fn generate_stylesheet_body_block(style: &Style) -> CssBlock {
 
 fn generate_stylesheet_navigation_block(style: &Style) -> CssBlock {
     let (left_and_right_position, width) = match style.margin_size() {
-        Some(size) => (
-            format!("calc(5vh + {})", size.value),
+        Some(margin) => (
+            format!("calc(5vh + {})", margin.value),
             format!(
                 "calc(100vw - calc(10vh + 2.5rem + calc(2 * {})))",
-                size.value
+                margin.value
             ),
         ),
         None => (
@@ -340,8 +339,8 @@ pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
             vec![CssBlockContents::line("opacity: 1;")],
         ),
         generate_stylesheet_navigation_button_block(style),
-        generate_stylesheet_link_block(style),
-        generate_stylesheet_img_block(style),
+        generate_stylesheet_link_block_unified(style),
+        generate_stylesheet_img_block_unified(style),
     ])
     .to_string()
     .context("Internal error: failed to generate navigation stylesheet.")?)
