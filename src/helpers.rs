@@ -57,9 +57,8 @@ pub fn standardize_path_separators(pathbuf_in: &Path) -> PathBuf {
 }
 
 pub fn unwrap_path_utf8(path: &Path) -> anyhow::Result<&str> {
-    Ok(path
-        .to_str()
-        .context("Ill-formed EPUB: non-UTF-8 path encountered.")?)
+    path.to_str()
+        .context("Ill-formed EPUB: non-UTF-8 path encountered.")
 }
 
 ///////////////
@@ -145,10 +144,6 @@ pub fn write_xml_characters<W: Write>(
 /////////////
 //   css   //
 /////////////
-
-pub fn tabs(indentation: usize) -> String {
-    std::iter::repeat('\t').take(indentation).collect()
-}
 
 pub fn generate_stylesheet_link_block_unified(style: &Style) -> CssBlock {
     let block_contents = match style.link_color() {

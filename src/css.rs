@@ -1,7 +1,5 @@
 use itertools::Itertools;
 
-use crate::helpers::tabs;
-
 // This is not a rigorous or complete CSS serializer. But it's good enough for project needs.
 
 #[derive(Clone, Debug)]
@@ -62,8 +60,8 @@ impl CssBlock {
         match self.is_empty() {
             true => None,
             false => {
-                let wrapper_tabs = tabs(indentation);
-                let contents_tabs = tabs(indentation + 1);
+                let wrapper_tabs = "\t".repeat(indentation);
+                let contents_tabs = "\t".repeat(indentation + 1);
 
                 let mut last_contents = CssBlockMostRecentContents::None;
 
@@ -80,8 +78,8 @@ impl CssBlock {
                             ));
                             last_contents = CssBlockMostRecentContents::Line;
                         }
-                        CssBlockContents::Block(block) => match block.to_string(indentation + 1) {
-                            Some(block_string) => {
+                        CssBlockContents::Block(block) => {
+                            if let Some(block_string) = block.to_string(indentation + 1) {
                                 let initial_newlines = match last_contents {
                                     CssBlockMostRecentContents::None => "\n",
                                     _ => "\n\n",
@@ -89,8 +87,7 @@ impl CssBlock {
                                 output.push_str(&format!("{initial_newlines}{block_string}"));
                                 last_contents = CssBlockMostRecentContents::Block;
                             }
-                            None => (),
-                        },
+                        }
                     }
                 }
                 output.push_str(&format!("\n{wrapper_tabs}}}"));

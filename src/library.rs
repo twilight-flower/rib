@@ -207,7 +207,7 @@ impl Library {
                         let resource_link_path_parent = resource_link_path
                             .parent()
                             .context("Unreachable: joined path is root.")?;
-                        create_dir_all(&resource_link_path_parent).with_context(|| {
+                        create_dir_all(resource_link_path_parent).with_context(|| {
                             format!(
                                 "Failed to create directory {}",
                                 resource_link_path_parent.display()
@@ -222,7 +222,7 @@ impl Library {
                         let raw_spine_item_path = raw_rendition_path.join(&spine_item.path);
                         let modified_spine_item_path = contents_dir.join(&spine_item.path);
                         let modified_spine_item_xhtml = xhtml::adjust_spine_xhtml(
-                            &epub_info,
+                            epub_info,
                             &contents_dir,
                             &raw_spine_item_path,
                             &modified_spine_item_path,
@@ -234,7 +234,7 @@ impl Library {
                         let modified_spine_item_path_parent = modified_spine_item_path
                             .parent()
                             .context("Unreachable: joined path is root.")?;
-                        create_dir_all(&modified_spine_item_path_parent).with_context(|| {
+                        create_dir_all(modified_spine_item_path_parent).with_context(|| {
                             format!(
                                 "Failed to create directory {}",
                                 modified_spine_item_path_parent.display()

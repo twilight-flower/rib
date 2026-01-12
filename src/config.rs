@@ -46,8 +46,8 @@ impl Config {
         let config_file_parent_path = config_file_path
             .parent()
             .context("Internal error: tried to write default config file to root.")?;
-        match create_dir_all(&config_file_parent_path) {
-            Ok(_) => match write(&config_file_path, Self::DEFAULT_STR) {
+        match create_dir_all(config_file_parent_path) {
+            Ok(_) => match write(config_file_path, Self::DEFAULT_STR) {
                 Ok(_) => (),
                 Err(_) => println!(
                     "Warning: failed to write default config file to {}.",

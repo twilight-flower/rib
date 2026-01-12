@@ -137,7 +137,7 @@ pub fn create_navigation_wrapper(
                                 let previous_linear_spine_item_path =
                                     get_previous_linear_spine_item_path(epub_info, spine_index)?;
                                 let previous_linear_spine_item_path_absolute =
-                                    contents_dir_path.join(&previous_linear_spine_item_path);
+                                    contents_dir_path.join(previous_linear_spine_item_path);
                                 let previous_linear_spine_item_path_relative = diff_paths(
                                     &previous_linear_spine_item_path_absolute,
                                     destination_path_parent,
@@ -167,7 +167,7 @@ pub fn create_navigation_wrapper(
                             let index_path_absolute = contents_dir_path_parent.join("index.xhtml");
                             let index_path_relative = diff_paths(
                                 &index_path_absolute,
-                                &destination_path_parent,
+                                destination_path_parent,
                             )
                             .with_context(|| {
                                 format!(
@@ -196,7 +196,7 @@ pub fn create_navigation_wrapper(
                                 let next_linear_spine_item_path =
                                     get_next_linear_spine_item_path(epub_info, spine_index)?;
                                 let next_linear_spine_item_path_absolute =
-                                    contents_dir_path.join(&next_linear_spine_item_path);
+                                    contents_dir_path.join(next_linear_spine_item_path);
                                 let next_linear_spine_item_path_relative = diff_paths(
                                     &next_linear_spine_item_path_absolute,
                                     destination_path_parent,
@@ -323,7 +323,7 @@ fn generate_stylesheet_navigation_button_block(style: &Style) -> CssBlock {
 }
 
 pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
-    Ok(CssFile::new(vec![
+    CssFile::new(vec![
         generate_stylesheet_body_block(style),
         CssBlock::new(
             "#section",
@@ -343,5 +343,5 @@ pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
         generate_stylesheet_img_block_unified(style),
     ])
     .to_string()
-    .context("Internal error: failed to generate navigation stylesheet.")?)
+    .context("Internal error: failed to generate navigation stylesheet.")
 }

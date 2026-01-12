@@ -166,7 +166,7 @@ impl EpubInfo {
                     let resource_path_parent = resource_path
                         .parent()
                         .context("Unreachable: joined path is root.")?;
-                    create_dir_all(&resource_path_parent).with_context(|| {
+                    create_dir_all(resource_path_parent).with_context(|| {
                         format!(
                             "Failed to create directory {}.",
                             resource_path_parent.display()

@@ -31,33 +31,6 @@ struct RawStylesheet {
     max_image_width_override: bool,
 }
 
-impl Into<Stylesheet> for RawStylesheet {
-    fn into(self) -> Stylesheet {
-        Stylesheet {
-            text_color: self.text_color.map(|color| StylesheetValue {
-                value: color,
-                override_book: self.text_color_override,
-            }),
-            link_color: self.link_color.map(|color| StylesheetValue {
-                value: color,
-                override_book: self.link_color_override,
-            }),
-            background_color: self.background_color.map(|color| StylesheetValue {
-                value: color,
-                override_book: self.background_color_override,
-            }),
-            margin_size: self.margin_size.map(|color| StylesheetValue {
-                value: color,
-                override_book: self.margin_size_override,
-            }),
-            max_image_width: self.max_image_width.map(|color| StylesheetValue {
-                value: color,
-                override_book: self.max_image_width_override,
-            }),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct Stylesheet {
     pub text_color: Option<StylesheetValue>,
@@ -65,6 +38,33 @@ pub struct Stylesheet {
     pub background_color: Option<StylesheetValue>,
     pub margin_size: Option<StylesheetValue>,
     pub max_image_width: Option<StylesheetValue>,
+}
+
+impl From<RawStylesheet> for Stylesheet {
+    fn from(value: RawStylesheet) -> Self {
+        Self {
+            text_color: value.text_color.map(|color| StylesheetValue {
+                value: color,
+                override_book: value.text_color_override,
+            }),
+            link_color: value.link_color.map(|color| StylesheetValue {
+                value: color,
+                override_book: value.link_color_override,
+            }),
+            background_color: value.background_color.map(|color| StylesheetValue {
+                value: color,
+                override_book: value.background_color_override,
+            }),
+            margin_size: value.margin_size.map(|color| StylesheetValue {
+                value: color,
+                override_book: value.margin_size_override,
+            }),
+            max_image_width: value.max_image_width.map(|color| StylesheetValue {
+                value: color,
+                override_book: value.max_image_width_override,
+            }),
+        }
+    }
 }
 
 impl Stylesheet {
@@ -118,35 +118,30 @@ impl Style {
     pub fn text_color(&self) -> Option<&StylesheetValue> {
         self.stylesheet
             .as_ref()
-            .map(|stylesheet| stylesheet.text_color.as_ref())
-            .flatten()
+            .and_then(|stylesheet| stylesheet.text_color.as_ref())
     }
 
     pub fn link_color(&self) -> Option<&StylesheetValue> {
         self.stylesheet
             .as_ref()
-            .map(|stylesheet| stylesheet.link_color.as_ref())
-            .flatten()
+            .and_then(|stylesheet| stylesheet.link_color.as_ref())
     }
 
     pub fn background_color(&self) -> Option<&StylesheetValue> {
         self.stylesheet
             .as_ref()
-            .map(|stylesheet| stylesheet.background_color.as_ref())
-            .flatten()
+            .and_then(|stylesheet| stylesheet.background_color.as_ref())
     }
 
     pub fn margin_size(&self) -> Option<&StylesheetValue> {
         self.stylesheet
             .as_ref()
-            .map(|stylesheet| stylesheet.margin_size.as_ref())
-            .flatten()
+            .and_then(|stylesheet| stylesheet.margin_size.as_ref())
     }
 
     pub fn max_image_width(&self) -> Option<&StylesheetValue> {
         self.stylesheet
             .as_ref()
-            .map(|stylesheet| stylesheet.max_image_width.as_ref())
-            .flatten()
+            .and_then(|stylesheet| stylesheet.max_image_width.as_ref())
     }
 }

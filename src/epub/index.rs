@@ -75,8 +75,7 @@ impl<'a> EpubIndex<'a> {
     ) -> anyhow::Result<Self> {
         let flattened_toc = toc
             .iter()
-            .map(|toc_item| toc_item.flattened())
-            .flatten()
+            .flat_map(|toc_item| toc_item.flattened())
             .collect_vec();
         Ok(
             match Self::flattened_toc_is_linear_relative_to_spine(spine, &flattened_toc)? {
@@ -265,8 +264,7 @@ impl<'a> EpubIndex<'a> {
                         )
                     })?;
                     wrap_xml_element_write(writer, XmlEvent::start_element("table"), |writer| {
-                        Ok(match self {
-                            // TODO
+                        match self {
                             Self::TocLinearRelativeToSpine(mapping_vec) => {
                                 wrap_xml_element_write(
                                     writer,
@@ -428,7 +426,8 @@ impl<'a> EpubIndex<'a> {
                                     },
                                 )?;
                             }
-                        })
+                        }
+                        Ok(())
                     })?;
                     Ok(())
                 })?;
@@ -477,7 +476,7 @@ fn generate_stylesheet_td_block(style: &Style) -> CssBlock {
 }
 
 pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
-    Ok(CssFile::new(vec![
+    CssFile::new(vec![
         generate_stylesheet_body_block(style),
         CssBlock::new(
             "table",
@@ -493,5 +492,5 @@ pub fn generate_stylesheet(style: &Style) -> anyhow::Result<String> {
         generate_stylesheet_img_block_unified(style),
     ])
     .to_string()
-    .context("Internal error: failed to generate index stylesheet.")?)
+    .context("Internal error: failed to generate index stylesheet.")
 }

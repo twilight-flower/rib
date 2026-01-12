@@ -128,7 +128,10 @@ fn main() -> anyhow::Result<()> {
     match args.subcommand {
         Some(subcommand) => match subcommand {
             ArgsSubcommand::Config(config_args) => match config_args.subcommand {
-                ConfigSubcommand::Path(_) => Ok(println!("{}", config_path.display())),
+                ConfigSubcommand::Path(_) => {
+                    println!("{}", config_path.display());
+                    Ok(())
+                }
             },
             ArgsSubcommand::Library(library_args) => match library_args.subcommand {
                 LibrarySubcommand::Clear(library_clear_args) => match library_clear_args.all {
@@ -140,7 +143,10 @@ fn main() -> anyhow::Result<()> {
                     ),
                 },
                 LibrarySubcommand::List(_) => library.list(),
-                LibrarySubcommand::Path(_) => Ok(println!("{}", library_path.display())),
+                LibrarySubcommand::Path(_) => {
+                    println!("{}", library_path.display());
+                    Ok(())
+                }
             },
         },
         None => match args.paths.len() {
