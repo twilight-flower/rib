@@ -5,8 +5,6 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serializer, de::Error};
 use xml::{
     EventWriter,
     writer::{XmlEvent, events::StartElementBuilder},
@@ -64,23 +62,6 @@ pub fn unwrap_path_utf8(path: &Path) -> anyhow::Result<&str> {
 ///////////////
 //   serde   //
 ///////////////
-
-pub fn deserialize_datetime<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<DateTime<Utc>, D::Error> {
-    let datetime_string = String::deserialize(deserializer)?;
-    DateTime::parse_from_rfc3339(&datetime_string)
-        .map(|datetime| datetime.to_utc())
-        .map_err(|_| D::Error::custom("Couldn't parse deserialized string as RFC 3339 datetime."))
-}
-
-pub fn serialize_datetime<S: Serializer>(
-    datetime: &DateTime<Utc>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let datetime_string = datetime.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true);
-    serializer.serialize_str(&datetime_string)
-}
 
 pub const fn return_true() -> bool {
     true

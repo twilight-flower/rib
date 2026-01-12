@@ -16,10 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     browser,
-    helpers::{
-        deserialize_datetime, get_dir_size, serialize_datetime, standardize_path_separators,
-        unwrap_path_utf8,
-    },
+    helpers::{get_dir_size, standardize_path_separators, unwrap_path_utf8},
     library::Library,
     style::Style,
 };
@@ -127,15 +124,7 @@ pub struct EpubInfo {
 
     // Library-management-relevant metadata
     pub path_from_library_root: PathBuf,
-    #[serde(
-        deserialize_with = "deserialize_datetime",
-        serialize_with = "serialize_datetime"
-    )]
     pub added_time: DateTime<Utc>,
-    #[serde(
-        deserialize_with = "deserialize_datetime",
-        serialize_with = "serialize_datetime"
-    )]
     pub last_opened_time: DateTime<Utc>,
 
     // Contents
