@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::Context;
-use itertools::Itertools;
 use xml::{EventWriter, writer::XmlEvent};
 
 use crate::{
@@ -76,7 +75,7 @@ impl<'a> EpubIndex<'a> {
         let flattened_toc = toc
             .iter()
             .flat_map(|toc_item| toc_item.flattened())
-            .collect_vec();
+            .collect::<Vec<_>>();
         Ok(
             match Self::flattened_toc_is_linear_relative_to_spine(spine, &flattened_toc)? {
                 true => Self::TocLinearRelativeToSpine(Self::map_spine_to_flattened_toc(

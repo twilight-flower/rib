@@ -12,7 +12,6 @@ use std::{
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -46,7 +45,9 @@ impl EpubTocItem {
         source: epub::doc::NavPoint,
         nesting_level: u64,
     ) -> anyhow::Result<Self> {
-        let mut path_split = unwrap_path_utf8(&source.content)?.split('#').collect_vec();
+        let mut path_split = unwrap_path_utf8(&source.content)?
+            .split('#')
+            .collect::<Vec<_>>();
         let path = match path_split.len() {
             0 => PathBuf::new(), // This should be possible per the EPUB spec, even if the library is failing to expose it well.
             1 => PathBuf::from(

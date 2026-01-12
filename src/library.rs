@@ -9,7 +9,6 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use cli_table::{Cell, Table};
 use epub::doc::EpubDoc;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -343,12 +342,12 @@ impl Library {
 
     pub fn list(&self) -> anyhow::Result<()> {
         // Maybe give this more styling later; but it's good enough for now.
-        let table = self
-            .books
-            .iter()
-            .sorted_by_key(|(_id, LibraryBookInfo::Epub(epub_info))| &epub_info.title)
+        let mut books_vec = self.books.iter().collect::<Vec<_>>();
+        books_vec.sort_by_key(|(_id, LibraryBookInfo::Epub(epub_info))| &epub_info.title);
+        let table = books_vec
+            .into_iter()
             .map(|(id, LibraryBookInfo::Epub(epub_info))| [id.cell(), (&epub_info.title).cell()])
-            .collect_vec()
+            .collect::<Vec<_>>()
             .table()
             .title(["ID".cell(), "Title".cell()]);
         println!(
@@ -404,28 +403,31 @@ impl Library {
         if oversized {
             let mut write_needed = false;
 
-            let mut ids_to_potentially_remove = self
+            let mut unexcluded_ids = self
                 .books
                 .iter()
                 .filter(|(id, _book_info)| !ids_to_exclude.contains(*id))
-                .sorted_unstable_by(
-                    |(_id_1, LibraryBookInfo::Epub(epub_info_1)),
-                     (_id_2, LibraryBookInfo::Epub(epub_info_2))| {
-                        match epub_info_1
-                            .last_opened_time
-                            .cmp(&epub_info_2.last_opened_time)
-                        {
-                            std::cmp::Ordering::Equal => epub_info_2
-                                .size_in_bytes()
-                                .cmp(&epub_info_1.size_in_bytes()),
-                            nonequal_datetime_ordering => nonequal_datetime_ordering,
-                        }
-                    },
-                )
+                .collect::<Vec<_>>();
+            unexcluded_ids.sort_unstable_by(
+                |(_id_1, LibraryBookInfo::Epub(epub_info_1)),
+                 (_id_2, LibraryBookInfo::Epub(epub_info_2))| {
+                    match epub_info_1
+                        .last_opened_time
+                        .cmp(&epub_info_2.last_opened_time)
+                    {
+                        std::cmp::Ordering::Equal => epub_info_2
+                            .size_in_bytes()
+                            .cmp(&epub_info_1.size_in_bytes()),
+                        nonequal_datetime_ordering => nonequal_datetime_ordering,
+                    }
+                },
+            );
+            let mut ids_to_potentially_remove = unexcluded_ids
+                .into_iter()
                 .map(|(id, _book_info)| id)
                 .rev()
                 .cloned()
-                .collect_vec();
+                .collect::<Vec<_>>();
 
             while oversized && let Some(id) = ids_to_potentially_remove.pop() {
                 self.remove_book(&id)?;

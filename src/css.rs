@@ -1,5 +1,3 @@
-use itertools::Itertools;
-
 // This is not a rigorous or complete CSS serializer. But it's good enough for project needs.
 
 #[derive(Clone, Debug)]
@@ -113,10 +111,10 @@ impl CssFile {
             .blocks
             .iter()
             .filter_map(|block| block.to_string(0))
-            .collect_vec();
+            .collect::<Vec<_>>();
         match nonempty_block_strings.is_empty() {
             true => None,
-            false => Some(format!("{}\n", nonempty_block_strings.iter().join("\n\n"))),
+            false => Some(format!("{}\n", nonempty_block_strings.join("\n\n"))),
         }
     }
 }
