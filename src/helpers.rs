@@ -82,7 +82,7 @@ pub fn serialize_datetime<S: Serializer>(
     serializer.serialize_str(&datetime_string)
 }
 
-pub fn return_true() -> bool {
+pub const fn return_true() -> bool {
     true
 }
 

@@ -32,7 +32,7 @@ pub struct CssBlock {
 }
 
 impl CssBlock {
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             prefix: String::new(),
             contents: Vec::new(),
@@ -104,7 +104,7 @@ pub struct CssFile {
 }
 
 impl CssFile {
-    pub fn new(blocks: Vec<CssBlock>) -> Self {
+    pub const fn new(blocks: Vec<CssBlock>) -> Self {
         Self { blocks }
     }
 

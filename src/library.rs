@@ -67,13 +67,13 @@ impl Library {
     }
 
     fn new(library_path: PathBuf, index_path: PathBuf) -> Self {
-        let new_cache = Self {
+        let new_library = Self {
             library_path,
             index_path,
             books: HashMap::new(),
         };
-        new_cache.write();
-        new_cache
+        new_library.write();
+        new_library
     }
 
     pub fn open(library_dir_path: PathBuf) -> anyhow::Result<Self> {

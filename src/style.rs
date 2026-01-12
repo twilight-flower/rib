@@ -97,7 +97,7 @@ impl Default for Style {
 }
 
 impl Style {
-    pub fn raw() -> Self {
+    pub const fn raw() -> Self {
         Self {
             include_index: false,
             inject_navigation: false,
@@ -111,7 +111,7 @@ impl Style {
         default_hasher.finish()
     }
 
-    pub fn uses_raw_contents_dir(&self) -> bool {
+    pub const fn uses_raw_contents_dir(&self) -> bool {
         !(self.inject_navigation || self.stylesheet.is_some())
     }
 
