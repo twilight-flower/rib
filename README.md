@@ -1,8 +1,12 @@
-# rib
+# Rib
 
-A minimalist EPUB reader. Name is short for '**r**ead **i**n **b**rowser'. Currently in development. Expect library format to be unstable during development; accordingly, if you care about preserving your library for long-term use, exercise caution when updating.
+A minimalist EPUB reader. Name is short for '**R**ead **i**n **b**rowser'. Currently in early development.
 
 Tested on Windows; currently untested on Linux and Mac, but theoretically should support them as well.
+
+## Installation
+
+For the moment, see the Development section below and build it yourself. More install options upcoming.
 
 ## Usage
 
@@ -19,6 +23,10 @@ rib help
 ```
 
 ## Development
+
+Dependencies
+
+- Cargo
 
 Build:
 

@@ -3,10 +3,10 @@ use std::{
     fs::{File, create_dir_all, read_to_string, remove_dir_all, write},
     io::BufReader,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 use anyhow::Context;
-use chrono::{DateTime, Utc};
 use cli_table::{Cell, Table};
 use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
@@ -127,7 +127,7 @@ impl Library {
         &mut self,
         epub: &mut EpubDoc<BufReader<File>>,
         epub_path: &Path,
-        request_time: DateTime<Utc>,
+        request_time: SystemTime,
     ) -> anyhow::Result<String> {
         let id = match epub.get_release_identifier() {
             Some(id) => id,
@@ -323,7 +323,7 @@ impl Library {
     pub fn open_book(
         &mut self,
         id: &str,
-        request_time: DateTime<Utc>,
+        request_time: SystemTime,
         browser: &Option<String>,
         style: &Style,
     ) -> anyhow::Result<()> {

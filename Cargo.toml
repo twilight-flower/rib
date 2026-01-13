@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Internal representation
-chrono = {version = "0.4.42", default-features = false, features = ["now", "serde"]}
-
 # IO
 argh = {version = "0.1.13", default-features = false, features = ["help"]} # Consider trying `clap` as an alternative
 cli-table = {version = "0.5.0", default-features = false} # Look more into alternatives

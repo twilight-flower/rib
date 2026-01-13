@@ -7,10 +7,10 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
     sync::LazyLock,
+    time::SystemTime,
 };
 
 use anyhow::{Context, bail};
-use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
 
@@ -124,8 +124,8 @@ pub struct EpubInfo {
 
     // Library-management-relevant metadata
     pub path_from_library_root: PathBuf,
-    pub added_time: DateTime<Utc>,
-    pub last_opened_time: DateTime<Utc>,
+    pub added_time: SystemTime,
+    pub last_opened_time: SystemTime,
 
     // Contents
     pub spine_items: Vec<EpubSpineItem>,
@@ -143,7 +143,7 @@ impl EpubInfo {
         epub: &mut EpubDoc<BufReader<File>>,
         epub_id: String,
         epub_path: &Path,
-        request_time: DateTime<Utc>,
+        request_time: SystemTime,
     ) -> anyhow::Result<Self> {
         let path_from_library_root = library.get_internal_path_from_id(&epub_id);
         let raw_dir_path_from_library_root = path_from_library_root.join("raw");

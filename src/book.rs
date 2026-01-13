@@ -1,10 +1,10 @@
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 use anyhow::Context;
-use chrono::{DateTime, Utc};
 use epub::doc::EpubDoc;
 
 use crate::{library::Library, style::Style};
@@ -12,7 +12,7 @@ use crate::{library::Library, style::Style};
 fn open_epub(
     library: &mut Library,
     path: &Path,
-    request_time: DateTime<Utc>,
+    request_time: SystemTime,
     browser: &Option<String>,
     styles: &[Style],
 ) -> anyhow::Result<String> {
@@ -42,7 +42,7 @@ pub fn open_books(
 ) -> anyhow::Result<()> {
     let mut opened_book_ids = HashSet::new();
 
-    let request_time = Utc::now();
+    let request_time = SystemTime::now();
     for path in paths {
         // Once we've got support for multiple formats, do branching here and maybe factor EPUB-handling into its own module.
         let book_id = open_epub(library, &path, request_time, &browser, &styles)?;
