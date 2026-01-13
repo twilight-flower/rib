@@ -1,3 +1,5 @@
+pub mod consts;
+
 use std::{
     fs::{hard_link, read_dir, symlink_metadata},
     io::Write,

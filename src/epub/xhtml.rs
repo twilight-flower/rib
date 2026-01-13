@@ -8,7 +8,7 @@ use xml::{EmitterConfig, reader::XmlEvent};
 use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, navigation::create_navigation_wrapper},
-    helpers::{unwrap_path_utf8, wrap_xml_element_write},
+    helpers::{consts::XHTML_ENTITIES, unwrap_path_utf8, wrap_xml_element_write},
     style::Style,
 };
 
@@ -112,6 +112,7 @@ fn adjust_xhtml_source(
     let source_file =
         read(source_path).with_context(|| format!("Failed to read {}.", source_path.display()))?;
     let reader = xml::ParserConfig::new()
+        .add_entities(XHTML_ENTITIES)
         .ignore_comments(false)
         .override_encoding(Some(xml::Encoding::Utf8))
         .create_reader(Cursor::new(source_file));
