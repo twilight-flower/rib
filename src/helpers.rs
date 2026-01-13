@@ -152,6 +152,7 @@ pub fn generate_stylesheet_img_block_unified(style: &Style) -> CssBlock {
 /////////////////
 
 pub fn create_link(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    // Unix-based systems use symlinks. Windows has permission issues with them, so uses hardlinks instead.
     #[cfg(windows)]
     hard_link(destination, source).with_context(|| {
         format!(
@@ -162,7 +163,13 @@ pub fn create_link(source: &Path, destination: &Path) -> anyhow::Result<()> {
     })?;
 
     #[cfg(unix)]
-    std::os::unix::fs::symlink(destination, source);
+    std::os::unix::fs::symlink(destination, source).with_context(|| {
+        format!(
+            "Failed to link {} to {}.",
+            source.display(),
+            destination.display()
+        )
+    })?;
 
     #[cfg(not(any(windows, unix)))]
     anyhow!(
