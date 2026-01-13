@@ -56,7 +56,7 @@ pub fn create_navigation_wrapper(
     let mut navigation_wrapper_buffer_writer = EmitterConfig::new()
         .perform_indent(true)
         .indent_string("\t")
-        .pad_self_closing(false)
+        .normalize_empty_elements(false) // Needs to be false to avoid problems when page is parsed as non-X HTML due to non-`.xhtml` filename
         .create_writer(navigation_wrapper_buffer);
 
     let contents_dir_path_parent = contents_dir_path

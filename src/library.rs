@@ -165,6 +165,7 @@ impl Library {
                     .context("Couldn't create rendition directory for new style.")?;
 
                 if !style.uses_raw_contents_dir() {
+                    // Generate rendition contents dir
                     let raw_rendition_path = self
                         .library_path
                         .join(&epub_info.raw_rendition.dir_path_from_library_root);
@@ -264,6 +265,7 @@ impl Library {
 
                 let default_file_path_from_library_root = match style.include_index {
                     true => {
+                        // Generate index
                         let index = EpubIndex::from_spine_and_toc(
                             &epub_info.spine_items,
                             &epub_info.table_of_contents,
