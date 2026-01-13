@@ -70,3 +70,6 @@ default_stylesheets = ["default_black"]
 	margin_size = "10%"
 	max_image_width = "100%"
 	max_image_width_override = true
+[stylesheets.none]
+	### This space intentionally left blank, to enable use of `-S none` on the
+	### command line to open books stylesheet-free.

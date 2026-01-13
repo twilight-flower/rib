@@ -77,6 +77,14 @@ impl Stylesheet {
             .map(|(name, raw_stylesheet)| (name, raw_stylesheet.into()))
             .collect())
     }
+
+    pub fn is_null(&self) -> bool {
+        self.text_color.is_none()
+            && self.link_color.is_none()
+            && self.background_color.is_none()
+            && self.margin_size.is_none()
+            && self.max_image_width.is_none()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]

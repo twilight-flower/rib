@@ -85,6 +85,13 @@ impl Config {
             }
         })
     }
+
+    pub fn get_stylesheet(&self, name: &str) -> Option<Stylesheet> {
+        match self.stylesheets.get(name) {
+            Some(sheet) if !sheet.is_null() => Some(sheet.clone()),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

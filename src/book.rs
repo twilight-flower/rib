@@ -15,6 +15,7 @@ fn open_epub(
     request_time: SystemTime,
     browser: &Option<String>,
     styles: &[Style],
+    open_all_styles: bool,
 ) -> anyhow::Result<String> {
     // Returns id of opened EPUB
 
@@ -24,10 +25,19 @@ fn open_epub(
 
     library.register_book_styles(&id, styles)?;
 
-    let first_style_specified = styles
-        .first()
-        .context("Internal error: no target style defined.")?;
-    library.open_book(&id, request_time, browser, first_style_specified)?;
+    match open_all_styles {
+        true => {
+            for style in styles {
+                library.open_book(&id, request_time, browser, style)?;
+            }
+        }
+        false => {
+            let first_style_specified = styles
+                .first()
+                .context("Internal error: no target style defined.")?;
+            library.open_book(&id, request_time, browser, first_style_specified)?;
+        }
+    }
 
     Ok(id)
 }
@@ -37,6 +47,7 @@ pub fn open_books(
     paths: Vec<PathBuf>,
     browser: Option<String>,
     styles: Vec<Style>,
+    open_all_styles: bool,
     max_books: Option<usize>,
     max_bytes: Option<u64>,
 ) -> anyhow::Result<()> {
@@ -45,7 +56,14 @@ pub fn open_books(
     let request_time = SystemTime::now();
     for path in paths {
         // Once we've got support for multiple formats, do branching here and maybe factor EPUB-handling into its own module.
-        let book_id = open_epub(library, &path, request_time, &browser, &styles)?;
+        let book_id = open_epub(
+            library,
+            &path,
+            request_time,
+            &browser,
+            &styles,
+            open_all_styles,
+        )?;
         opened_book_ids.insert(book_id);
     }
 

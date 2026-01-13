@@ -106,10 +106,13 @@ struct Args {
     #[argh(option, short = 'i')]
     /// include index when opening book (default: true)
     include_index: Option<bool>,
-    #[argh(switch, short = 'n')]
+    #[argh(option, short = 'n')]
     /// inject navigation when opening book (default: true)
     inject_navigation: Option<bool>,
-    // Add options to control index and navigation inclusion/exclusion and stylesheet-selection individually here, in addition to or instead of the 'raw' shorthand and the config file
+    #[argh(option, short = 'S')]
+    /// stylesheet(s), by name as defined in config, to open book with
+    stylesheets: Vec<String>,
+    // TODO: implement overrides for individual styles
     #[argh(switch, short = 'r')]
     /// open raw book without index or navigation or stylesheets
     raw: bool,
@@ -173,11 +176,6 @@ fn main() -> anyhow::Result<()> {
                 Ok(())
             }
             _ => {
-                let browser = match (args.browser, config.default_browser) {
-                    (Some(args_browser), _) => Some(args_browser),
-                    (None, Some(config_browser)) => Some(config_browser),
-                    (None, None) => None,
-                };
                 let include_index = match (args.include_index, config.include_index) {
                     (Some(arg_value), _) => arg_value,
                     (_, config_value) => config_value,
@@ -188,28 +186,47 @@ fn main() -> anyhow::Result<()> {
                 };
                 let styles = match args.raw {
                     true => vec![Style::raw()],
-                    false => match config.default_stylesheets.is_empty() {
-                        true => vec![Style {
-                            include_index,
-                            inject_navigation,
-                            stylesheet: None,
-                        }],
-                        false => config
-                            .default_stylesheets
-                            .iter()
-                            .map(|stylesheet_name| Style {
+                    false => {
+                        let stylesheets = match (
+                            args.stylesheets.is_empty(),
+                            config.default_stylesheets.is_empty(),
+                        ) {
+                            (true, true) => None,
+                            (true, false) => Some(&config.default_stylesheets),
+                            (false, _) => Some(&args.stylesheets),
+                        };
+                        match stylesheets {
+                            None => vec![Style {
                                 include_index,
                                 inject_navigation,
-                                stylesheet: config.stylesheets.get(stylesheet_name).cloned(),
-                            })
-                            .collect(),
-                    },
+                                stylesheet: None,
+                            }],
+                            Some(stylesheets) => stylesheets
+                                .iter()
+                                .map(|stylesheet_name| Style {
+                                    include_index,
+                                    inject_navigation,
+                                    stylesheet: config.get_stylesheet(stylesheet_name),
+                                })
+                                .collect(),
+                        }
+                    }
+                };
+                let open_all_styles = match args.stylesheets.is_empty() {
+                    true => false,
+                    false => true,
+                };
+                let browser = match (args.browser, config.default_browser) {
+                    (Some(args_browser), _) => Some(args_browser),
+                    (None, Some(config_browser)) => Some(config_browser),
+                    (None, None) => None,
                 };
                 open_books(
                     &mut library,
                     args.paths,
                     browser,
                     styles,
+                    open_all_styles,
                     config.max_library_books,
                     config.max_library_bytes,
                 )
