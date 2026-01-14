@@ -8,7 +8,7 @@ use std::{
 use anyhow::Context;
 use serde::Deserialize;
 
-use crate::{helpers::return_true, style::Stylesheet};
+use crate::{cli::CliStyleCommands, helpers::return_true, style::Stylesheet};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -86,9 +86,9 @@ impl Config {
         })
     }
 
-    pub fn get_stylesheet(&self, name: &str) -> Option<Stylesheet> {
+    pub fn get_stylesheet(&self, name: &str, overrides: &CliStyleCommands) -> Option<Stylesheet> {
         match self.stylesheets.get(name) {
-            Some(sheet) if !sheet.is_null() => Some(sheet.clone()),
+            Some(sheet) if !sheet.is_null() => Some(sheet.with_overrides(overrides)),
             _ => None,
         }
     }

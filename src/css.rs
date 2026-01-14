@@ -3,6 +3,7 @@
 #[derive(Clone, Debug)]
 pub enum CssBlockContents {
     Line(String),
+    #[allow(dead_code)] // TEMP, while block is unused
     Block(CssBlock),
 }
 

@@ -52,6 +52,8 @@ default_stylesheets = ["default_black"]
 ### text_color_override, link_color_override, et cetera. If an override key is
 ### set to true, its associated style will take priority over any stylesheets
 ### specified in the book. Otherwise, book stylesheets will take precedence.
+### Override options will be treated as false if their associated book-styles
+### are undefined.
 ###
 ### Each stylesheet is defined by name under the [stylesheets] table:
 ### [stylesheets.foo] would define a stylesheet named "foo", for instance.

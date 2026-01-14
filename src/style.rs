@@ -5,10 +5,35 @@ use std::{
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::cli::CliStyleCommands;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct StylesheetValue {
     pub value: String,
     pub override_book: bool,
+}
+
+impl StylesheetValue {
+    fn new(value: String, override_book: bool) -> Self {
+        Self {
+            value,
+            override_book,
+        }
+    }
+
+    fn with_overrides(
+        &self,
+        value_override: &Option<String>,
+        override_book_override: Option<bool>,
+    ) -> Self {
+        Self {
+            value: value_override
+                .as_ref()
+                .cloned()
+                .unwrap_or(self.value.clone()),
+            override_book: override_book_override.unwrap_or(self.override_book),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -43,26 +68,21 @@ pub struct Stylesheet {
 impl From<RawStylesheet> for Stylesheet {
     fn from(value: RawStylesheet) -> Self {
         Self {
-            text_color: value.text_color.map(|color| StylesheetValue {
-                value: color,
-                override_book: value.text_color_override,
-            }),
-            link_color: value.link_color.map(|color| StylesheetValue {
-                value: color,
-                override_book: value.link_color_override,
-            }),
-            background_color: value.background_color.map(|color| StylesheetValue {
-                value: color,
-                override_book: value.background_color_override,
-            }),
-            margin_size: value.margin_size.map(|color| StylesheetValue {
-                value: color,
-                override_book: value.margin_size_override,
-            }),
-            max_image_width: value.max_image_width.map(|color| StylesheetValue {
-                value: color,
-                override_book: value.max_image_width_override,
-            }),
+            text_color: value
+                .text_color
+                .map(|color| StylesheetValue::new(color, value.text_color_override)),
+            link_color: value
+                .link_color
+                .map(|color| StylesheetValue::new(color, value.link_color_override)),
+            background_color: value
+                .background_color
+                .map(|color| StylesheetValue::new(color, value.background_color_override)),
+            margin_size: value
+                .margin_size
+                .map(|margin| StylesheetValue::new(margin, value.margin_size_override)),
+            max_image_width: value
+                .max_image_width
+                .map(|width| StylesheetValue::new(width, value.max_image_width_override)),
         }
     }
 }
@@ -84,6 +104,87 @@ impl Stylesheet {
             && self.background_color.is_none()
             && self.margin_size.is_none()
             && self.max_image_width.is_none()
+    }
+
+    pub fn with_overrides(&self, overrides: &CliStyleCommands) -> Self {
+        Self {
+            text_color: self
+                .text_color
+                .as_ref()
+                .map(|value| {
+                    value.with_overrides(&overrides.text_color, overrides.text_color_override)
+                })
+                .or_else(|| {
+                    overrides.text_color.as_ref().cloned().map(|color| {
+                        StylesheetValue::new(
+                            color.clone(),
+                            overrides.text_color_override.unwrap_or_default(),
+                        )
+                    })
+                }),
+            link_color: self
+                .link_color
+                .as_ref()
+                .map(|value| {
+                    value.with_overrides(&overrides.link_color, overrides.link_color_override)
+                })
+                .or_else(|| {
+                    overrides.link_color.as_ref().cloned().map(|color| {
+                        StylesheetValue::new(
+                            color,
+                            overrides.link_color_override.unwrap_or_default(),
+                        )
+                    })
+                }),
+            background_color: self
+                .background_color
+                .as_ref()
+                .map(|value| {
+                    value.with_overrides(
+                        &overrides.background_color,
+                        overrides.background_color_override,
+                    )
+                })
+                .or_else(|| {
+                    overrides.background_color.as_ref().cloned().map(|color| {
+                        StylesheetValue::new(
+                            color,
+                            overrides.background_color_override.unwrap_or_default(),
+                        )
+                    })
+                }),
+            margin_size: self
+                .margin_size
+                .as_ref()
+                .map(|value| {
+                    value.with_overrides(&overrides.margin_size, overrides.margin_size_override)
+                })
+                .or_else(|| {
+                    overrides.margin_size.as_ref().cloned().map(|margin| {
+                        StylesheetValue::new(
+                            margin,
+                            overrides.margin_size_override.unwrap_or_default(),
+                        )
+                    })
+                }),
+            max_image_width: self
+                .max_image_width
+                .as_ref()
+                .map(|value| {
+                    value.with_overrides(
+                        &overrides.max_image_width,
+                        overrides.max_image_width_override,
+                    )
+                })
+                .or_else(|| {
+                    overrides.max_image_width.as_ref().cloned().map(|width| {
+                        StylesheetValue::new(
+                            width,
+                            overrides.max_image_width_override.unwrap_or_default(),
+                        )
+                    })
+                }),
+        }
     }
 }
 
