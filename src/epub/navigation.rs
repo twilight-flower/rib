@@ -116,9 +116,11 @@ pub fn create_navigation_wrapper(
             })?;
             wrap_xml_element_write(writer, XmlEvent::start_element("body"), |writer| {
                 wrap_xml_element_write(
+                    // It'd be nice to do sandboxing here to block scripts until I've considered whether I want to allow them, but hard to configure in a way that doesn't break things. So leave it out for now.
                     writer,
                     XmlEvent::start_element("iframe")
                         .attr("id", "section")
+                        // .attr("sandbox", "allow-popups allow-same-origin allow-top-navigation-by-user-activation allow-top-navigation-to-custom-protocols")
                         .attr("srcdoc", source),
                     |_writer| Ok(()),
                 )?;

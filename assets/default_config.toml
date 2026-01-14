@@ -11,7 +11,7 @@
 ### previously-opened books when opening any new ones.
 
 # max_library_books = 100
-max_library_bytes = 1_000_000 # 100 MB
+max_library_bytes = 100_000_000 # 100 MB
 
 ### By default, when a book is opened in rib, it will include an index page
 ### with links to all the book's sections and table-of-contents-entries. This

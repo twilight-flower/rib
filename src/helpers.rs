@@ -12,9 +12,6 @@ use xml::{
     writer::{XmlEvent, events::StartElementBuilder},
 };
 
-#[cfg(not(any(windows, unix)))]
-use anyhow::anyhow;
-
 use crate::{
     css::{CssBlock, CssBlockContents},
     style::Style,
@@ -172,7 +169,7 @@ pub fn create_link(source: &Path, destination: &Path) -> anyhow::Result<()> {
     })?;
 
     #[cfg(not(any(windows, unix)))]
-    anyhow!(
+    anyhow::anyhow!(
         "Unable to link {} to {}: unsupported OS.",
         source.display(),
         destination.display()

@@ -1,8 +1,10 @@
 # Rib
 
+Read EPUBs in your web browser!
+
 A minimalist EPUB reader. Name is short for '**R**ead **i**n **b**rowser'. Currently in early development.
 
-Tested on Windows; currently untested on Linux and Mac, but theoretically should support them as well.
+Tested on Windows and Linux; currently untested Mac, but theoretically should work there as well.
 
 ## Installation
 

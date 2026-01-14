@@ -7,114 +7,76 @@ mod helpers;
 mod library;
 mod style;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Context;
-use argh::{ArgsInfo, FromArgs};
+use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 
 use crate::{book::open_books, config::Config, library::Library, style::Style};
 
-//////////////
-//   Args   //
-//////////////
-
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
-/// print path to config file
-#[argh(subcommand, name = "path")]
-struct ConfigPathArgs {}
-
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
-#[argh(subcommand)]
+#[derive(Clone, Copy, Debug, Subcommand)]
 enum ConfigSubcommand {
-    Path(ConfigPathArgs),
+    /// print path to config file
+    Path,
 }
 
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
-/// interact with rib's configuration
-#[argh(subcommand, name = "config")]
-struct ConfigArgs {
-    #[argh(subcommand)]
-    subcommand: ConfigSubcommand,
-}
-
-#[derive(Clone, Debug, FromArgs, ArgsInfo)]
-/// clear books from library
-#[argh(subcommand, name = "clear")]
-struct LibraryClearArgs {
-    #[argh(switch, short = 'a')]
-    /// clear all books from library
-    all: bool,
-    #[argh(option, short = 'b')]
-    /// integer; clear books until no more than this many remain in the library
-    max_books: Option<usize>,
-    #[argh(option, short = 'B')]
-    /// integer; clear books until library size is no more than this many bytes
-    max_bytes: Option<u64>,
-    #[argh(positional)]
-    /// ids of books to clear even if they're otherwise within any specified library size limits
-    ids: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
-/// list books in library
-#[argh(subcommand, name = "list")]
-struct LibraryListArgs {
-    // Empty for now; later on, add option for a more machine-readable output, and maybe store more metadata in the library so the machines and/or nonmachines can filter on more information
-}
-
-#[derive(Clone, Copy, Debug, FromArgs, ArgsInfo)]
-/// print path to library directory
-#[argh(subcommand, name = "path")]
-struct LibraryPathArgs {}
-
-#[derive(Clone, Debug, FromArgs, ArgsInfo)]
-#[argh(subcommand)]
+#[derive(Clone, Debug, Subcommand)]
 enum LibrarySubcommand {
-    Clear(LibraryClearArgs),
-    List(LibraryListArgs),
-    Path(LibraryPathArgs),
+    /// clear books from library
+    Clear {
+        // TODO: figure out how to give this a help subcommand
+        /// ids of books to clear even if they're otherwise within any specified library size limits
+        ids: Vec<String>,
+        /// clear all books from library
+        #[arg(short, long)]
+        all: bool,
+        /// integer; clear books until no more than this many remain in the library
+        #[arg(short = 'b', long)]
+        max_books: Option<usize>,
+        /// integer; clear books until library size is no more than this many bytes
+        #[arg(short = 'B', long)]
+        max_bytes: Option<u64>,
+    },
+    /// list books in library
+    // TODO: add option for a more machine-readable output, and maybe store more metadata in the library so the machines and/or nonmachines can filter on more information
+    List,
+    /// print path to library directory
+    Path,
 }
 
-#[derive(Clone, Debug, FromArgs, ArgsInfo)]
-/// interact with rib's library of previously-opened books
-#[argh(subcommand, name = "library")]
-struct LibraryArgs {
-    #[argh(subcommand)]
-    subcommand: LibrarySubcommand,
-}
-
-#[derive(Clone, Debug, FromArgs, ArgsInfo)]
-#[argh(subcommand)]
+#[derive(Clone, Debug, Subcommand)]
 enum ArgsSubcommand {
-    Config(ConfigArgs),
-    Library(LibraryArgs),
-} // Placeholder
+    /// interact with rib's configuration
+    #[command(subcommand)]
+    Config(ConfigSubcommand),
+    /// interact with rib's library of previously-opened books
+    #[command(subcommand)]
+    Library(LibrarySubcommand),
+}
 
-// When updating to support non-EPUB input, adjust docstrings here accordingly
-#[derive(Clone, Debug, FromArgs, ArgsInfo)]
-/// Minimalist EPUB reader.
+#[derive(Clone, Debug, Parser)]
+#[command(version, about)]
+#[clap(arg_required_else_help(true))]
 struct Args {
-    #[argh(subcommand)]
+    #[command(subcommand)]
     subcommand: Option<ArgsSubcommand>,
-    #[argh(positional)]
     /// epub paths to open
     paths: Vec<PathBuf>,
-    #[argh(option, short = 'b')]
-    /// command to open book with (default: system default web browser)
+    /// command to open book with
+    #[arg(short, long)]
     browser: Option<String>,
-    #[argh(option, short = 'i')]
-    /// include index when opening book (default: true)
+    /// include index when opening book
+    #[arg(short = 'i', long)]
     include_index: Option<bool>,
-    #[argh(option, short = 'n')]
-    /// inject navigation when opening book (default: true)
+    /// inject navigation when opening book
+    #[arg(short = 'n', long)]
     inject_navigation: Option<bool>,
-    #[argh(option, short = 'S')]
     /// stylesheet(s), by name as defined in config, to open book with
+    #[arg(short = 'S', long)]
     stylesheets: Vec<String>,
-    // TODO: implement overrides for individual styles
-    #[argh(switch, short = 'r')]
     /// open raw book without index or navigation or stylesheets
+    #[arg(short, long)]
     raw: bool,
 }
 
@@ -123,7 +85,7 @@ struct Args {
 //////////////
 
 fn main() -> anyhow::Result<()> {
-    let args: Args = argh::from_env();
+    let args = Args::parse();
 
     let project_dirs = ProjectDirs::from("", "", "rib")
         .context("Couldn't open library: no home directory path found.")?;
@@ -136,101 +98,83 @@ fn main() -> anyhow::Result<()> {
 
     match args.subcommand {
         Some(subcommand) => match subcommand {
-            ArgsSubcommand::Config(config_args) => match config_args.subcommand {
-                ConfigSubcommand::Path(_) => {
+            ArgsSubcommand::Config(config_subcommand) => match config_subcommand {
+                ConfigSubcommand::Path => {
                     println!("{}", config_path.display());
                     Ok(())
                 }
             },
-            ArgsSubcommand::Library(library_args) => match library_args.subcommand {
-                LibrarySubcommand::Clear(library_clear_args) => match library_clear_args.all {
+            ArgsSubcommand::Library(library_subcommand) => match library_subcommand {
+                LibrarySubcommand::Clear {ids, max_books, max_bytes, all} => match all {
                     true => library.clear(Some(0), None, &[]),
                     false => library.clear(
-                        library_clear_args.max_books,
-                        library_clear_args.max_bytes,
-                        &library_clear_args.ids,
+                        max_books,
+                        max_bytes,
+                        &ids,
                     ),
                 },
-                LibrarySubcommand::List(_) => library.list(),
-                LibrarySubcommand::Path(_) => {
+                LibrarySubcommand::List => library.list(),
+                LibrarySubcommand::Path => {
                     println!("{}", library_path.display());
                     Ok(())
                 }
             },
         },
-        None => match args.paths.len() {
-            0 => {
-                // Print argh's help text and exit
-                let first_arg = std::env::args().next();
-                let run_command = first_arg
-                    .as_ref()
-                    .and_then(|command_str| {
-                        Path::new(command_str)
-                            .file_name()
-                            .and_then(|executable_name| executable_name.to_str())
-                    })
-                    .unwrap_or("rib");
-                let help_text = Args::from_args(&[run_command], &["help"])
-                    .expect_err("Internal error: failed to print help text."); // Error type here isn't anyhow-compatible
-                println!("{}", help_text.output);
-                Ok(())
-            }
-            _ => {
-                let include_index = match (args.include_index, config.include_index) {
-                    (Some(arg_value), _) => arg_value,
-                    (_, config_value) => config_value,
-                };
-                let inject_navigation = match (args.inject_navigation, config.inject_navigation) {
-                    (Some(arg_value), _) => arg_value,
-                    (_, config_value) => config_value,
-                };
-                let styles = match args.raw {
-                    true => vec![Style::raw()],
-                    false => {
-                        let stylesheets = match (
-                            args.stylesheets.is_empty(),
-                            config.default_stylesheets.is_empty(),
-                        ) {
-                            (true, true) => None,
-                            (true, false) => Some(&config.default_stylesheets),
-                            (false, _) => Some(&args.stylesheets),
-                        };
-                        match stylesheets {
-                            None => vec![Style {
+        None => {
+            let include_index = match (args.include_index, config.include_index) {
+                (Some(arg_value), _) => arg_value,
+                (_, config_value) => config_value,
+            };
+            let inject_navigation = match (args.inject_navigation, config.inject_navigation) {
+                (Some(arg_value), _) => arg_value,
+                (_, config_value) => config_value,
+            };
+            let styles = match args.raw {
+                true => vec![Style::raw()],
+                false => {
+                    let stylesheets = match (
+                        args.stylesheets.is_empty(),
+                        config.default_stylesheets.is_empty(),
+                    ) {
+                        (true, true) => None,
+                        (true, false) => Some(&config.default_stylesheets),
+                        (false, _) => Some(&args.stylesheets),
+                    };
+                    match stylesheets {
+                        None => vec![Style {
+                            include_index,
+                            inject_navigation,
+                            stylesheet: None,
+                        }],
+                        Some(stylesheets) => stylesheets
+                            .iter()
+                            .map(|stylesheet_name| Style {
                                 include_index,
                                 inject_navigation,
-                                stylesheet: None,
-                            }],
-                            Some(stylesheets) => stylesheets
-                                .iter()
-                                .map(|stylesheet_name| Style {
-                                    include_index,
-                                    inject_navigation,
-                                    stylesheet: config.get_stylesheet(stylesheet_name),
-                                })
-                                .collect(),
-                        }
+                                stylesheet: config.get_stylesheet(stylesheet_name),
+                            })
+                            .collect(),
                     }
-                };
-                let open_all_styles = match args.stylesheets.is_empty() {
-                    true => false,
-                    false => true,
-                };
-                let browser = match (args.browser, config.default_browser) {
-                    (Some(args_browser), _) => Some(args_browser),
-                    (None, Some(config_browser)) => Some(config_browser),
-                    (None, None) => None,
-                };
-                open_books(
-                    &mut library,
-                    args.paths,
-                    browser,
-                    styles,
-                    open_all_styles,
-                    config.max_library_books,
-                    config.max_library_bytes,
-                )
-            }
-        },
+                }
+            };
+            let open_all_styles = match args.stylesheets.is_empty() {
+                true => false,
+                false => true,
+            };
+            let browser = match (args.browser, config.default_browser) {
+                (Some(args_browser), _) => Some(args_browser),
+                (None, Some(config_browser)) => Some(config_browser),
+                (None, None) => None,
+            };
+            open_books(
+                &mut library,
+                args.paths,
+                browser,
+                styles,
+                open_all_styles,
+                config.max_library_books,
+                config.max_library_bytes,
+            )
+        }
     }
 }
