@@ -126,6 +126,7 @@ pub struct EpubInfo {
     pub path_from_library_root: PathBuf,
     pub added_time: SystemTime,
     pub last_opened_time: SystemTime,
+    pub last_opened_styles: Vec<Style>,
 
     // Contents
     pub spine_items: Vec<EpubSpineItem>,
@@ -142,7 +143,6 @@ impl EpubInfo {
         library: &mut Library,
         epub: &mut EpubDoc<BufReader<File>>,
         epub_id: String,
-        epub_path: &Path,
         request_time: SystemTime,
     ) -> anyhow::Result<Self> {
         let path_from_library_root = library.get_internal_path_from_id(&epub_id);
@@ -173,12 +173,6 @@ impl EpubInfo {
                 ),
             }
         }
-
-        println!(
-            "Dumped raw contents of {} to {}.",
-            epub_path.display(),
-            raw_dir_path.display()
-        );
 
         let creators = epub
             .metadata
@@ -254,6 +248,7 @@ impl EpubInfo {
             path_from_library_root,
             added_time: request_time,
             last_opened_time: request_time,
+            last_opened_styles: Vec::new(),
             spine_items: raw_spine_items,
             nonspine_resource_paths: raw_nonspine_resource_paths,
             table_of_contents,

@@ -101,6 +101,21 @@ pub struct CliStyleCommands {
     pub max_image_width_override: Option<bool>,
 }
 
+impl CliStyleCommands {
+    pub fn is_undefined(&self) -> bool {
+        self.text_color.is_none()
+            && self.link_color.is_none()
+            && self.background_color.is_none()
+            && self.margin_size.is_none()
+            && self.max_image_width.is_none()
+            && self.text_color_override.is_none()
+            && self.link_color_override.is_none()
+            && self.background_color_override.is_none()
+            && self.margin_size_override.is_none()
+            && self.max_image_width_override.is_none()
+    }
+}
+
 #[derive(Clone, Debug, Parser)]
 #[command(
     version,

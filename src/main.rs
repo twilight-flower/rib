@@ -13,7 +13,7 @@ use clap::Parser;
 use directories::ProjectDirs;
 
 use crate::{
-    book::open_books,
+    book::{StylesForBookOpen, open_books},
     cli::{Cli, CliSubcommand, ConfigSubcommand, LibrarySubcommand},
     config::Config,
     library::Library,
@@ -70,37 +70,46 @@ fn main() -> anyhow::Result<()> {
                 (Some(arg_value), _) => arg_value,
                 (_, config_value) => config_value,
             };
-            let styles = match args.raw {
-                true => vec![Style::raw()],
-                false => {
-                    let stylesheets = match (
-                        args.stylesheets.is_empty(),
-                        config.default_stylesheets.is_empty(),
-                    ) {
-                        (true, true) => None,
-                        (true, false) => Some(&config.default_stylesheets),
-                        (false, _) => Some(&args.stylesheets),
-                    };
-                    match stylesheets {
-                        None => vec![Style {
-                            include_index,
-                            inject_navigation,
-                            stylesheet: None,
-                        }],
-                        Some(sheets) => sheets
-                            .iter()
-                            .map(|sheet_name| Style {
+            let using_default_style = !args.raw
+                && args.include_index.is_none()
+                && args.inject_navigation.is_none()
+                && args.stylesheets.is_empty()
+                && args.styles.is_undefined();
+            let styles = StylesForBookOpen {
+                styles: match args.raw {
+                    true => vec![Style::raw()],
+                    false => {
+                        match (
+                            args.stylesheets.is_empty(),
+                            config.default_stylesheets.is_empty(),
+                        ) {
+                            (true, true) => vec![Style {
                                 include_index,
                                 inject_navigation,
-                                stylesheet: config.get_stylesheet(sheet_name, &args.styles),
-                            })
-                            .collect(),
+                                stylesheet: None,
+                            }],
+                            (true, false) => config
+                                .default_stylesheets
+                                .iter()
+                                .map(|sheet_name| Style {
+                                    include_index,
+                                    inject_navigation,
+                                    stylesheet: config.get_stylesheet(sheet_name, &args.styles),
+                                })
+                                .collect(),
+                            (false, _) => args
+                                .stylesheets
+                                .iter()
+                                .map(|sheet_name| Style {
+                                    include_index,
+                                    inject_navigation,
+                                    stylesheet: config.get_stylesheet(sheet_name, &args.styles),
+                                })
+                                .collect(),
+                        }
                     }
-                }
-            };
-            let open_all_styles = match args.stylesheets.is_empty() {
-                true => false,
-                false => true,
+                },
+                using_default_style,
             };
             let browser = match (args.browser, config.default_browser) {
                 (Some(args_browser), _) => Some(args_browser),
@@ -112,7 +121,6 @@ fn main() -> anyhow::Result<()> {
                 args.paths,
                 browser,
                 styles,
-                open_all_styles,
                 config.max_library_books,
                 config.max_library_bytes,
             )

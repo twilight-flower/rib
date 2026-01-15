@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{File, create_dir_all, read_to_string, remove_dir_all, write},
     io::BufReader,
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::SystemTime,
 };
 
@@ -126,7 +126,6 @@ impl Library {
     pub fn register_epub_and_get_id(
         &mut self,
         epub: &mut EpubDoc<BufReader<File>>,
-        epub_path: &Path,
         request_time: SystemTime,
     ) -> anyhow::Result<String> {
         let id = match epub.get_release_identifier() {
@@ -138,13 +137,19 @@ impl Library {
                 .clone(),
         };
         if !self.books.contains_key(&id) {
-            let new_epub_info =
-                EpubInfo::new_from_epub(self, epub, id.clone(), epub_path, request_time)?;
+            let new_epub_info = EpubInfo::new_from_epub(self, epub, id.clone(), request_time)?;
             self.books
                 .insert(id.clone(), LibraryBookInfo::Epub(new_epub_info));
             self.write();
         }
         Ok(id)
+    }
+
+    pub fn get_last_opened_styles(&self, id: &str) -> anyhow::Result<&Vec<Style>> {
+        let LibraryBookInfo::Epub(epub_info) = self.books.get(id).with_context(|| {
+            format!("Couldn't get last opened styles for book id {id}: not found in library index.")
+        })?;
+        Ok(&epub_info.last_opened_styles)
     }
 
     pub fn register_book_styles(&mut self, id: &str, styles: &[Style]) -> anyhow::Result<()> {
@@ -335,7 +340,13 @@ impl Library {
             format!("Internal error: tried to open book id {id} with an unregistered style.")
         })?;
         target_rendition.open_in_browser(&self.library_path, browser)?;
-        epub_info.last_opened_time = request_time;
+        match epub_info.last_opened_time == request_time {
+            true => epub_info.last_opened_styles.push(style.clone()),
+            false => {
+                epub_info.last_opened_time = request_time;
+                epub_info.last_opened_styles = vec![style.clone()];
+            }
+        }
         self.write();
         Ok(())
     }
@@ -391,7 +402,6 @@ impl Library {
                 )
             })?;
         } // If it exists but isn't a dir, maybe have handling for that to avoid later messes?
-        println!("Removed {} from {}.", epub_info.title, book_dir.display());
         Ok(())
     }
 

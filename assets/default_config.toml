@@ -26,10 +26,9 @@ max_library_bytes = 100_000_000 # 100 MB
 
 # inject_navigation = false
 
-### List of stylesheets to automatically apply to a book upon opening it. If
-### the list is empty, no stylesheet will be applied. If the list contains
-### multiple stylesheets, the book will be generated with all of them and will
-### be initially opened with the first one specified.
+### List of stylesheets (defined below) to automatically apply to a book upon
+### opening it for the first time, if other styles aren't specified. If the list
+### is empty, no stylesheet will be applied.
 
 default_stylesheets = ["default_black"]
 
