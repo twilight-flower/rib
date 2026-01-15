@@ -10,6 +10,8 @@ Tested on Windows and Linux; currently untested Mac, but theoretically should wo
 
 For the moment, see the Development section below and build it yourself. More install options upcoming.
 
+Runtime behavior depends on `xdg-open` on Linux. No known external dependencies on Windows or Mac.
+
 ## Usage
 
 Open book with default settings:
