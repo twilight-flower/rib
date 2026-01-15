@@ -1,7 +1,7 @@
 pub mod consts;
 
 use std::{
-    fs::{hard_link, read_dir, symlink_metadata},
+    fs::{read_dir, symlink_metadata},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -151,7 +151,7 @@ pub fn generate_stylesheet_img_block_unified(style: &Style) -> CssBlock {
 pub fn create_link(source: &Path, destination: &Path) -> anyhow::Result<()> {
     // Unix-based systems use symlinks. Windows has permission issues with them, so uses hardlinks instead.
     #[cfg(windows)]
-    hard_link(destination, source).with_context(|| {
+    std::fs::hard_link(destination, source).with_context(|| {
         format!(
             "Failed to link {} to {}.",
             source.display(),
