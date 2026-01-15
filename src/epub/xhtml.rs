@@ -67,25 +67,40 @@ fn generate_stylesheet_link_block(style: &Style, override_book: bool) -> CssBloc
 }
 
 pub fn generate_stylesheet_img_block(style: &Style, override_book: bool) -> CssBlock {
-    match style.max_image_width() {
-        Some(width) if width.override_book == override_book => match override_book {
-            true => CssBlock::new(
-                "img",
-                vec![CssBlockContents::line(format!(
-                    "max-width: {} !important;",
-                    width.value
-                ))],
-            ),
-            false => CssBlock::new(
-                ":where(img)",
-                vec![CssBlockContents::line(format!(
-                    "max-width: {};",
-                    width.value
-                ))],
-            ),
-        },
-        _ => CssBlock::empty(),
+    let block_prefix = match override_book {
+        true => "img",
+        false => ":where(img)",
+    };
+    let mut block_contents = Vec::new();
+    if let Some(height) = style.max_image_height()
+        && height.override_book == override_book
+    {
+        match override_book {
+            true => block_contents.push(CssBlockContents::line(format!(
+                "max-height: {} !important;",
+                height.value
+            ))),
+            false => block_contents.push(CssBlockContents::line(format!(
+                "max-height: {};",
+                height.value
+            ))),
+        }
     }
+    if let Some(width) = style.max_image_width()
+        && width.override_book == override_book
+    {
+        match override_book {
+            true => block_contents.push(CssBlockContents::line(format!(
+                "max-width: {} !important;",
+                width.value
+            ))),
+            false => block_contents.push(CssBlockContents::line(format!(
+                "max-width: {};",
+                width.value
+            ))),
+        }
+    }
+    CssBlock::new(block_prefix, block_contents)
 }
 
 pub fn generate_stylesheets(style: &Style) -> (Option<String>, Option<String>) {

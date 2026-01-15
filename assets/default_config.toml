@@ -45,6 +45,7 @@ default_stylesheets = ["default_black"]
 ### text_color as needed.
 ### - background_color: CSS background-color attribute to apply to book body.
 ### - margin_size: CSS left and right margin attribute to apply to book body.
+### - max_image_height: CSS max-height attribute to apply to images in book.
 ### - max_image_width: CSS max-width attribute to apply to images in book.
 ###
 ### Override keys: each direct book-style key has a corresponding override key.
@@ -59,9 +60,10 @@ default_stylesheets = ["default_black"]
 
 [stylesheets.default_black]
 	text_color = "white"
-	link_color = "#a8f" # Experiment and see if this should be made lighter
+	link_color = "#a8f"
 	background_color = "black"
 	margin_size = "10%"
+	max_image_height = "100vh"
 	max_image_width = "100%"
 	max_image_width_override = true
 [stylesheets.default_white]
@@ -69,6 +71,7 @@ default_stylesheets = ["default_black"]
 	link_color = "#51f"
 	background_color = "white"
 	margin_size = "10%"
+	max_image_height = "100vh"
 	max_image_width = "100%"
 	max_image_width_override = true
 [stylesheets.none]

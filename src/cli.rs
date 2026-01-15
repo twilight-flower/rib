@@ -80,6 +80,9 @@ pub struct CliStyleCommands {
     /// margin-left and margin-right attribute values for book body
     #[arg(long)]
     pub margin_size: Option<String>,
+    /// max-height attribute value for book img embeds
+    #[arg(long)]
+    pub max_image_height: Option<String>,
     /// max-width attribute value for book img embeds
     #[arg(long)]
     pub max_image_width: Option<String>,
@@ -96,6 +99,9 @@ pub struct CliStyleCommands {
     /// user-supplied margin size overrides book's internally-specified margin sizes
     #[arg(long)]
     pub margin_size_override: Option<bool>,
+    /// user-supplied max image height overrides book's internally-specified max image height
+    #[arg(long)]
+    pub max_image_height_override: Option<bool>,
     /// user-supplied max image width overrides book's internally-specified max image width
     #[arg(long)]
     pub max_image_width_override: Option<bool>,
@@ -107,11 +113,13 @@ impl CliStyleCommands {
             && self.link_color.is_none()
             && self.background_color.is_none()
             && self.margin_size.is_none()
+            && self.max_image_height.is_none()
             && self.max_image_width.is_none()
             && self.text_color_override.is_none()
             && self.link_color_override.is_none()
             && self.background_color_override.is_none()
             && self.margin_size_override.is_none()
+            && self.max_image_height_override.is_none()
             && self.max_image_width_override.is_none()
     }
 }

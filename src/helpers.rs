@@ -134,13 +134,19 @@ pub fn generate_stylesheet_link_block_unified(style: &Style) -> CssBlock {
 }
 
 pub fn generate_stylesheet_img_block_unified(style: &Style) -> CssBlock {
-    let block_contents = match style.max_image_width() {
-        Some(width) => vec![CssBlockContents::line(format!(
+    let mut block_contents = Vec::new();
+    if let Some(height) = style.max_image_height() {
+        block_contents.push(CssBlockContents::line(format!(
+            "max-height: {};",
+            height.value
+        )));
+    }
+    if let Some(width) = style.max_image_width() {
+        block_contents.push(CssBlockContents::line(format!(
             "max-width: {};",
             width.value
-        ))],
-        None => Vec::new(),
-    };
+        )));
+    }
     CssBlock::new("img", block_contents)
 }
 

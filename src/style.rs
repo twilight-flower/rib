@@ -42,6 +42,7 @@ struct RawStylesheet {
     link_color: Option<String>,
     background_color: Option<String>,
     margin_size: Option<String>,
+    max_image_height: Option<String>,
     max_image_width: Option<String>,
 
     #[serde(default)]
@@ -53,6 +54,8 @@ struct RawStylesheet {
     #[serde(default)]
     margin_size_override: bool,
     #[serde(default)]
+    max_image_height_override: bool,
+    #[serde(default)]
     max_image_width_override: bool,
 }
 
@@ -62,6 +65,7 @@ pub struct Stylesheet {
     pub link_color: Option<StylesheetValue>,
     pub background_color: Option<StylesheetValue>,
     pub margin_size: Option<StylesheetValue>,
+    pub max_image_height: Option<StylesheetValue>,
     pub max_image_width: Option<StylesheetValue>,
 }
 
@@ -80,6 +84,9 @@ impl From<RawStylesheet> for Stylesheet {
             margin_size: value
                 .margin_size
                 .map(|margin| StylesheetValue::new(margin, value.margin_size_override)),
+            max_image_height: value
+                .max_image_height
+                .map(|height| StylesheetValue::new(height, value.max_image_height_override)),
             max_image_width: value
                 .max_image_width
                 .map(|width| StylesheetValue::new(width, value.max_image_width_override)),
@@ -103,6 +110,7 @@ impl Stylesheet {
             && self.link_color.is_none()
             && self.background_color.is_none()
             && self.margin_size.is_none()
+            && self.max_image_height.is_none()
             && self.max_image_width.is_none()
     }
 
@@ -164,6 +172,23 @@ impl Stylesheet {
                         StylesheetValue::new(
                             margin,
                             overrides.margin_size_override.unwrap_or_default(),
+                        )
+                    })
+                }),
+            max_image_height: self
+                .max_image_height
+                .as_ref()
+                .map(|value| {
+                    value.with_overrides(
+                        &overrides.max_image_height,
+                        overrides.max_image_height_override,
+                    )
+                })
+                .or_else(|| {
+                    overrides.max_image_height.as_ref().cloned().map(|height| {
+                        StylesheetValue::new(
+                            height,
+                            overrides.max_image_height_override.unwrap_or_default(),
                         )
                     })
                 }),
@@ -246,6 +271,12 @@ impl Style {
         self.stylesheet
             .as_ref()
             .and_then(|stylesheet| stylesheet.margin_size.as_ref())
+    }
+
+    pub fn max_image_height(&self) -> Option<&StylesheetValue> {
+        self.stylesheet
+            .as_ref()
+            .and_then(|stylesheet| stylesheet.max_image_height.as_ref())
     }
 
     pub fn max_image_width(&self) -> Option<&StylesheetValue> {
