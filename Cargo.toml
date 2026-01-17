@@ -8,7 +8,7 @@ description = "Minimalist EPUB reader"
 [dependencies]
 # IO
 clap = { version = "4.5.54", features = ["derive"] }
-cli-table = {version = "0.5.0", default-features = false} # Look more into alternatives
+cli-table = {version = "0.5.0", default-features = false} # Disabled features: csv, derive
 epub = "2.1.5"
 sanitize-filename = "0.6.0"
 serde = {version = "1.0.228", features = ["derive"]}

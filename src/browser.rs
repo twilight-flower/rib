@@ -9,9 +9,10 @@ pub fn open(path: &Path, browser: &Option<String>) -> anyhow::Result<()> {
             if cfg!(windows) {
                 "explorer"
             } else if cfg!(target_os = "linux") {
+                // TODO: run `xdg-open --version` and confirm exit code 0, else print warning and return
                 "xdg-open"
             } else if cfg!(target_os = "macos") {
-                // TODO: test this and make sure it works right
+                // TODO: confirm this works right
                 "open"
             } else {
                 bail!(

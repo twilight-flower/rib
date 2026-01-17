@@ -310,6 +310,7 @@ fn adjust_xhtml_source(
     Ok(adjusted_source_buffer_writer.into_inner())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn adjust_spine_xhtml(
     epub_info: &EpubInfo,
     contents_dir_path: &Path,
