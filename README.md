@@ -1,5 +1,7 @@
 # Rib
 
+[![crates.io](https://img.shields.io/crates/v/rib.svg)](https://crates.io/crates/rib)
+
 Read EPUBs in your web browser!
 
 A lightweight desktop EPUB reader. Name is short for '**R**ead **i**n **b**rowser'. Currently in early development.
