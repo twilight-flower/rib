@@ -266,6 +266,15 @@ impl Library {
                             )
                         },
                     )?;
+
+                    let navigation_script = include_str!("../assets/navigation_script.js");
+                    let navigation_script_path = dir_path.join("navigation_script.js");
+                    write(&navigation_script_path, navigation_script).with_context(|| {
+                        format!(
+                            "Failed to write rendition navigation script to {}.",
+                            navigation_script_path.display()
+                        )
+                    })?;
                 }
 
                 let default_file_path_from_library_root = match style.include_index {

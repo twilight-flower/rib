@@ -77,6 +77,16 @@ pub fn create_navigation_wrapper(
         )
     })?;
 
+    let script_path_absolute = contents_dir_path_parent.join("navigation_script.js");
+    let script_path_relative = diff_paths(&script_path_absolute, destination_path_parent)
+        .with_context(|| {
+            format!(
+                "Internal error: failed to generate path from {} to {}.",
+                destination_path_parent.display(),
+                script_path_absolute.display()
+            )
+        })?;
+
     let first_linear_section_index = epub_info
         .spine_items
         .iter()
@@ -110,6 +120,12 @@ pub fn create_navigation_wrapper(
                     XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
                         .attr("href", unwrap_path_utf8(&stylesheet_path_relative)?),
+                    |_writer| Ok(()),
+                )?;
+                wrap_xml_element_write(
+                    writer,
+                    XmlEvent::start_element("script")
+                        .attr("src", unwrap_path_utf8(&script_path_relative)?),
                     |_writer| Ok(()),
                 )?;
                 Ok(())
