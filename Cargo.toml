@@ -3,7 +3,7 @@
 name = "rib"
 edition = "2024"
 
-version = "0.1.0"
+version = "0.1.1"
 
 description = "Browser-based EPUB reader."
 repository = "https://github.com/twilight-flower/rib"
