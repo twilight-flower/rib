@@ -11,6 +11,10 @@
 
 Edit `Cargo.toml`'s `version` key to the version number being released, incrementing major or minor or patch version as befits the changes since last release.
 
+### Update changelog
+
+Edit `CHANGELOG.md` to list changes associated with the new version.
+
 ### Ensure all tests pass
 
 ```
