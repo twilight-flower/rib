@@ -1,11 +1,21 @@
 [package]
+
 name = "rib"
-version = "0.1.0"
 edition = "2024"
 
-description = "Minimalist EPUB reader"
+version = "0.1.0"
+
+description = "Browser-based EPUB reader."
+repository = "https://github.com/twilight-flower/rib"
+readme = "README.md"
+license = "MIT"
+keywords = ["epub", "ebook"]
+categories = ["command-line-utilities"]
+
+exclude = [".github/workflows/release.yml", "docs/release_workflow.md", ".gitignore", "dist-workspace.toml"]
 
 [dependencies]
+
 # IO
 clap = { version = "4.5.54", features = ["derive"] }
 cli-table = {version = "0.5.0", default-features = false} # Disabled features: csv, derive
@@ -23,3 +33,10 @@ pathdiff = "0.2.3"
 
 # Error handling
 anyhow = "1.0.100"
+
+[profile.dist]
+
+# The profile that 'dist' will build with
+
+inherits = "release"
+lto = "thin"

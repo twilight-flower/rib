@@ -2,7 +2,7 @@
 
 Read EPUBs in your web browser!
 
-A minimalist EPUB reader. Name is short for '**R**ead **i**n **b**rowser'. Currently in early development.
+A lightweight desktop EPUB reader. Name is short for '**R**ead **i**n **b**rowser'. Currently in early development.
 
 Tested on Windows and Linux; currently untested on Mac, but theoretically should work there as well.
 
@@ -10,7 +10,7 @@ Tested on Windows and Linux; currently untested on Mac, but theoretically should
 
 For the moment, see the Development section below and build it yourself. More install options upcoming.
 
-Depends on `xdg-open` on Linux. No known external dependencies on Windows or Mac.
+Has a dependency on `xdg-open` on Linux. No known external dependencies on Windows or Mac.
 
 ## Usage
 
@@ -28,7 +28,7 @@ rib help
 
 ## Development
 
-Build dependencies
+Build dependencies:
 
 - Cargo
 
