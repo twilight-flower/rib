@@ -44,4 +44,4 @@ cd rib
 cargo build --release
 ```
 
-The output executable will appear in the `target/release` subdirectory. For convenience, you'll likely want to move it to somewhere on your PATH.
+The executable will be built in the `target/release` subdirectory. For convenience, you'll likely want to move it to somewhere on your PATH.
