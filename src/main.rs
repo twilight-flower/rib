@@ -27,7 +27,7 @@ use crate::{
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
 
-    let project_dirs = ProjectDirs::from("", "", "rib")
+    let project_dirs = ProjectDirs::from("", "", "Rib")
         .context("Couldn't open library: no home directory path found.")?;
 
     let config_path = project_dirs.config_dir().join("config.toml");

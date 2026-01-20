@@ -26,17 +26,19 @@ rib help
 
 Rib has a dependency on `xdg-open` on Linux. It has no known external dependencies on Windows or Mac.
 
-### Install via Cargo
+### Option 1: Install via Cargo
 
 ```
 cargo install --locked rib
 ```
 
-### Download via GitHub releases
+`cargo-binstall` is also supported.
+
+### Option 2: Download via GitHub Releases
 
 See [the releases page](https://github.com/twilight-flower/rib/releases) for download links. For convenience, you'll likely want to extract the release's executable to somewhere on your PATH.
 
-### Build manually
+### Option 3: Build Manually
 
 ```
 git clone git@github.com:twilight-flower/rib.git

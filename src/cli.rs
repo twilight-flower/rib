@@ -153,7 +153,7 @@ pub struct Cli {
     // (The docstring here is currently ignored due to the flattened layout)
     #[command(flatten)]
     pub styles: CliStyleCommands,
-    /// open raw book without adding index or navigation or styling
+    /// open raw book without index or navigation or styling
     #[arg(short, long)]
     pub raw: bool,
     // TODO: 'verbose' arg to print non-warning info messages like the dump path descriptions

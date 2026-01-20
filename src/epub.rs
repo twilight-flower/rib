@@ -139,19 +139,13 @@ pub struct EpubInfo {
 }
 
 impl EpubInfo {
-    pub fn new_from_epub(
-        library: &mut Library,
+    fn extract_epub_to_raw_dir(
         epub: &mut EpubDoc<BufReader<File>>,
-        epub_id: String,
-        request_time: SystemTime,
-    ) -> anyhow::Result<Self> {
-        let path_from_library_root = library.get_internal_path_from_id(&epub_id);
-        let raw_dir_path_from_library_root = path_from_library_root.join("raw");
-        let raw_dir_path = library.library_path.join(&raw_dir_path_from_library_root);
-
+        raw_dir_path: &Path,
+    ) -> anyhow::Result<()> {
         for (id, resource) in epub.resources.clone() {
             let resource_path = raw_dir_path.join(resource.path);
-            match resource_path.starts_with(&raw_dir_path) {
+            match resource_path.starts_with(raw_dir_path) {
                 true => {
                     let resource_path_parent = resource_path
                         .parent()
@@ -173,42 +167,52 @@ impl EpubInfo {
                 ),
             }
         }
+        Ok(())
+    }
 
-        let creators = epub
-            .metadata
+    fn get_epub_creators(epub: &mut EpubDoc<BufReader<File>>) -> Vec<String> {
+        epub.metadata
             .iter()
             .filter_map(|metadata_item| match &metadata_item.property == "creator" {
                 true => Some(metadata_item.value.clone()),
                 false => None,
             })
-            .collect();
-        let cover_path = match epub.get_cover_id() {
-            // Match instead of map to avoid needing to unwrap the find-output in a closure where passing to anyhow is inconvenient
-            Some(cover_id) => epub.resources.iter().find_map(|(resource_id, resource)| {
+            .collect()
+    }
+
+    fn get_epub_cover_path(epub: &mut EpubDoc<BufReader<File>>) -> Option<PathBuf> {
+        epub.get_cover_id().and_then(|cover_id| {
+            epub.resources.iter().find_map(|(resource_id, resource)| {
                 match cover_id == **resource_id {
                     true => Some(standardize_path_separators(&resource.path)),
                     false => None,
                 }
-            }),
-            None => None,
-        };
-
-        let raw_spine_items = epub
-            .spine
-            .iter()
-            .map(|spine_item| {
-                Ok(EpubSpineItem {
-                    path: standardize_path_separators(&epub.resources.get(&spine_item.idref).context("Internal error: EPUB library failed to get resource for id listed in its spine.")?.path),
-                    linear: spine_item.linear,
-                })
             })
-            .collect::<anyhow::Result<Vec<EpubSpineItem>>>()?;
-        let raw_nonspine_resource_paths = epub
-            .resources
+        })
+    }
+
+    fn get_epub_spine_items(
+        epub: &mut EpubDoc<BufReader<File>>,
+    ) -> anyhow::Result<Vec<EpubSpineItem>> {
+        let mut spine_items = Vec::new();
+        for item in &epub.spine {
+            spine_items.push(EpubSpineItem {
+                path: standardize_path_separators(&epub.resources.get(&item.idref).context("Internal error: EPUB library failed to get resource for id listed in its spine.")?.path),
+                linear: item.linear,
+            });
+        }
+        Ok(spine_items)
+    }
+
+    fn get_epub_nonspine_resource_paths(
+        epub: &mut EpubDoc<BufReader<File>>,
+        spine_items: &[EpubSpineItem],
+    ) -> Vec<PathBuf> {
+        epub.resources
             .values()
             .filter_map(|resource| {
                 let resource_path = &resource.path;
-                match raw_spine_items
+                match spine_items
                     .iter()
                     .any(|spine_item| &spine_item.path == resource_path)
                 {
@@ -216,22 +220,50 @@ impl EpubInfo {
                     false => Some(standardize_path_separators(resource_path)),
                 }
             })
-            .collect();
-        let table_of_contents = epub
-            .toc
-            .iter()
-            .map(|navpoint| EpubTocItem::from_epub_library_representation(navpoint.clone(), 0))
-            .collect::<anyhow::Result<Vec<EpubTocItem>>>()?;
+            .collect()
+    }
+
+    fn get_epub_table_of_contents(
+        epub: &mut EpubDoc<BufReader<File>>,
+    ) -> anyhow::Result<Vec<EpubTocItem>> {
+        let mut toc = Vec::new();
+        for navpoint in &epub.toc {
+            toc.push(EpubTocItem::from_epub_library_representation(
+                navpoint.clone(),
+                0,
+            )?);
+        }
+        Ok(toc)
+    }
+
+    pub fn new_from_epub(
+        library: &mut Library,
+        epub: &mut EpubDoc<BufReader<File>>,
+        epub_id: String,
+        request_time: SystemTime,
+    ) -> anyhow::Result<Self> {
+        let path_from_library_root = library.get_internal_path_from_id(&epub_id);
+        let raw_dir_path_from_library_root = path_from_library_root.join("raw");
+        let raw_dir_path = library.library_path.join(&raw_dir_path_from_library_root);
+
+        Self::extract_epub_to_raw_dir(epub, &raw_dir_path)?;
+
+        let creators = Self::get_epub_creators(epub);
+        let cover_path = Self::get_epub_cover_path(epub);
+
+        let spine_items = Self::get_epub_spine_items(epub)?;
+        let nonspine_resource_paths = Self::get_epub_nonspine_resource_paths(epub, &spine_items);
+        let table_of_contents = Self::get_epub_table_of_contents(epub)?;
 
         let first_linear_spine_item_path = standardize_path_separators(
-            &raw_spine_items
+            &spine_items
                 .iter()
                 .find(|item| item.linear)
                 .context("Ill-formed EPUB: no linear spine items.")?
                 .path,
         );
         let last_linear_spine_item_path = standardize_path_separators(
-            &raw_spine_items
+            &spine_items
                 .iter()
                 .rev()
                 .find(|item| item.linear)
@@ -239,28 +271,31 @@ impl EpubInfo {
                 .path,
         );
 
+        let raw_rendition_default_file_path_from_library_root =
+            raw_dir_path_from_library_root.join(&first_linear_spine_item_path);
+
         Ok(Self {
             id: epub_id,
             title: epub.get_title().context("Ill-formed EPUB: no title.")?,
             creators,
             cover_path,
+            first_linear_spine_item_path,
             last_linear_spine_item_path,
             path_from_library_root,
             added_time: request_time,
             last_opened_time: request_time,
             last_opened_styles: Vec::new(),
-            spine_items: raw_spine_items,
-            nonspine_resource_paths: raw_nonspine_resource_paths,
+            spine_items,
+            nonspine_resource_paths,
             table_of_contents,
             raw_rendition: EpubRenditionInfo {
                 style: Style::raw(),
-                default_file_path_from_library_root: raw_dir_path_from_library_root
-                    .join(&first_linear_spine_item_path),
+                default_file_path_from_library_root:
+                    raw_rendition_default_file_path_from_library_root,
                 dir_path_from_library_root: raw_dir_path_from_library_root,
                 bytes: get_dir_size(&raw_dir_path)?,
             },
             nonraw_renditions: Vec::new(),
-            first_linear_spine_item_path,
         })
     }
 
