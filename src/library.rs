@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{File, create_dir_all, read_to_string, remove_dir_all, write},
     io::BufReader,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::SystemTime,
 };
 
@@ -152,180 +152,274 @@ impl Library {
         Ok(&epub_info.last_opened_styles)
     }
 
+    fn write_style_index(
+        epub_info: &EpubInfo,
+        style: &Style,
+        library_path: &Path,
+        index_path_from_library_root: &Path,
+        rendition_dir_path: &Path,
+        rendition_contents_dir_path_from_rendition_dir: PathBuf,
+    ) -> anyhow::Result<()> {
+        let index =
+            EpubIndex::from_spine_and_toc(&epub_info.spine_items, &epub_info.table_of_contents)?;
+        let index_xhtml =
+            index.to_xhtml(epub_info, rendition_contents_dir_path_from_rendition_dir)?;
+        let index_path = library_path.join(index_path_from_library_root);
+        write(&index_path, &index_xhtml).with_context(|| {
+            format!(
+                "Failed to write rendition index to {}.",
+                index_path.display()
+            )
+        })?;
+
+        let index_stylesheet = crate::epub::index::generate_stylesheet(style)?;
+        let index_stylesheet_path = rendition_dir_path.join("index_styles.css");
+        write(&index_stylesheet_path, index_stylesheet).with_context(|| {
+            format!(
+                "Failed to write rendition index stylesheet to {}.",
+                index_stylesheet_path.display()
+            )
+        })?;
+
+        Ok(())
+    }
+
+    fn write_rendition_contents_stylesheets(
+        style: &Style,
+        rendition_dir_path: &Path,
+    ) -> anyhow::Result<(Option<PathBuf>, Option<PathBuf>)> {
+        let (no_override_stylesheet, override_stylesheet) = xhtml::generate_stylesheets(style);
+
+        let no_override_stylesheet_path = match no_override_stylesheet {
+            Some(sheet) => {
+                let path = rendition_dir_path.join("section_styles_without_override.css");
+                write(&path, sheet).with_context(|| {
+                    format!(
+                        "Failed to write rendition no-override stylesheet to {}.",
+                        path.display()
+                    )
+                })?;
+                Some(path)
+            }
+            None => None,
+        };
+
+        let override_stylesheet_path = match override_stylesheet {
+            Some(sheet) => {
+                let path = rendition_dir_path.join("section_styles_with_override.css");
+                write(&path, sheet).with_context(|| {
+                    format!(
+                        "Failed to write rendition override stylesheet to {}.",
+                        path.display()
+                    )
+                })?;
+                Some(path)
+            }
+            None => None,
+        };
+
+        Ok((no_override_stylesheet_path, override_stylesheet_path))
+    }
+
+    fn link_rendition_contents_nonspine_resources(
+        epub_info: &EpubInfo,
+        rendition_contents_dir: &Path,
+        raw_rendition_path: &Path,
+    ) -> anyhow::Result<()> {
+        for resource_path in &epub_info.nonspine_resource_paths {
+            let resource_link_path = rendition_contents_dir.join(resource_path);
+            let resource_link_path_parent = resource_link_path
+                .parent()
+                .context("Unreachable: joined path is root.")?;
+            create_dir_all(resource_link_path_parent).with_context(|| {
+                format!(
+                    "Failed to create directory {}",
+                    resource_link_path_parent.display()
+                )
+            })?;
+
+            let resource_destination_path = raw_rendition_path.join(resource_path);
+            create_link(&resource_link_path, &resource_destination_path)?;
+        }
+        Ok(())
+    }
+
+    fn write_rendition_contents_modified_spine_items(
+        epub_info: &EpubInfo,
+        style: &Style,
+        rendition_contents_dir: &Path,
+        raw_rendition_path: &Path,
+        no_override_stylesheet_path: &Option<PathBuf>,
+        override_stylesheet_path: &Option<PathBuf>,
+    ) -> anyhow::Result<()> {
+        // Todo: add support for SVG spine items
+        for (index, spine_item) in epub_info.spine_items.iter().enumerate() {
+            let raw_spine_item_path = raw_rendition_path.join(&spine_item.path);
+            let modified_spine_item_path = rendition_contents_dir.join(&spine_item.path);
+            let modified_spine_item_xhtml = xhtml::adjust_spine_xhtml(
+                epub_info,
+                rendition_contents_dir,
+                &raw_spine_item_path,
+                &modified_spine_item_path,
+                no_override_stylesheet_path.as_deref(),
+                override_stylesheet_path.as_deref(),
+                index,
+                style,
+            )?;
+            let modified_spine_item_path_parent = modified_spine_item_path
+                .parent()
+                .context("Unreachable: joined path is root.")?;
+            create_dir_all(modified_spine_item_path_parent).with_context(|| {
+                format!(
+                    "Failed to create directory {}",
+                    modified_spine_item_path_parent.display()
+                )
+            })?;
+            write(&modified_spine_item_path, modified_spine_item_xhtml).with_context(|| {
+                format!(
+                    "Failed to write file to {}.",
+                    modified_spine_item_path.display()
+                )
+            })?;
+        }
+        Ok(())
+    }
+
+    fn write_rendition_contents_navigation_peripherals(
+        style: &Style,
+        rendition_dir_path: &Path,
+    ) -> anyhow::Result<()> {
+        let navigation_stylesheet = crate::epub::navigation::generate_stylesheet(style)?;
+        let navigation_stylesheet_path = rendition_dir_path.join("navigation_styles.css");
+        write(&navigation_stylesheet_path, navigation_stylesheet).with_context(|| {
+            format!(
+                "Failed to write rendition navigation stylesheet to {}.",
+                navigation_stylesheet_path.display()
+            )
+        })?;
+
+        let navigation_script = include_str!("../assets/navigation_script.js");
+        let navigation_script_path = rendition_dir_path.join("navigation_script.js");
+        write(&navigation_script_path, navigation_script).with_context(|| {
+            format!(
+                "Failed to write rendition navigation script to {}.",
+                navigation_script_path.display()
+            )
+        })?;
+
+        Ok(())
+    }
+
+    fn generate_rendition_contents_dir(
+        epub_info: &EpubInfo,
+        style: &Style,
+        rendition_dir_path: &Path,
+        raw_rendition_path: &Path,
+    ) -> anyhow::Result<()> {
+        let rendition_contents_dir = rendition_dir_path.join("contents");
+
+        let (no_override_stylesheet_path, override_stylesheet_path) =
+            Self::write_rendition_contents_stylesheets(style, rendition_dir_path)?;
+
+        Self::link_rendition_contents_nonspine_resources(
+            epub_info,
+            &rendition_contents_dir,
+            raw_rendition_path,
+        )?;
+        Self::write_rendition_contents_modified_spine_items(
+            epub_info,
+            style,
+            &rendition_contents_dir,
+            raw_rendition_path,
+            &no_override_stylesheet_path,
+            &override_stylesheet_path,
+        )?;
+
+        if style.inject_navigation {
+            Self::write_rendition_contents_navigation_peripherals(style, rendition_dir_path)?;
+        }
+
+        Ok(())
+    }
+
     pub fn register_book_styles(&mut self, id: &str, styles: &[Style]) -> anyhow::Result<()> {
         let LibraryBookInfo::Epub(epub_info) = self.books.get_mut(id).with_context(|| {
             format!("Couldn't register styles for book id {id}: not found in library index.")
         })?;
         let mut write_needed = false;
         for style in styles {
-            let style_already_present = match style == &Style::raw() {
-                true => true,
-                false => epub_info.find_rendition(style).is_some(),
-            };
-            if !style_already_present {
-                let dir_path_from_library_root =
+            if epub_info.find_rendition(style).is_none() {
+                write_needed = true;
+
+                let rendition_dir_path_from_library_root =
                     epub_info.get_new_rendition_dir_path_from_style(style);
-                let dir_path = self.library_path.join(&dir_path_from_library_root);
-                create_dir_all(&dir_path)
+                let rendition_dir_path = self
+                    .library_path
+                    .join(&rendition_dir_path_from_library_root);
+                create_dir_all(&rendition_dir_path)
                     .context("Couldn't create rendition directory for new style.")?;
 
-                if !style.uses_raw_contents_dir() {
-                    // Generate rendition contents dir
-                    let raw_rendition_path = self
-                        .library_path
-                        .join(&epub_info.raw_rendition.dir_path_from_library_root);
-                    let contents_dir = dir_path.join("contents");
-
-                    let (no_override_stylesheet, override_stylesheet) =
-                        xhtml::generate_stylesheets(style);
-
-                    let no_override_stylesheet_path = match no_override_stylesheet {
-                        Some(sheet) => {
-                            let path = dir_path.join("section_styles_without_override.css");
-                            write(&path, sheet).with_context(|| {
-                                format!(
-                                    "Failed to write rendition no-override stylesheet to {}.",
-                                    path.display()
-                                )
-                            })?;
-                            Some(path)
+                let default_file_path_from_library_root =
+                    match (style.include_index, style.uses_raw_contents_dir()) {
+                        (true, true) => {
+                            let index_path_from_library_root =
+                                rendition_dir_path_from_library_root.join("index.xhtml");
+                            Self::write_style_index(
+                                epub_info,
+                                style,
+                                &self.library_path,
+                                &index_path_from_library_root,
+                                &rendition_dir_path,
+                                ["..", "raw"].iter().collect(),
+                            )?;
+                            index_path_from_library_root
                         }
-                        None => None,
-                    };
-
-                    let override_stylesheet_path = match override_stylesheet {
-                        Some(sheet) => {
-                            let path = dir_path.join("section_styles_with_override.css");
-                            write(&path, sheet).with_context(|| {
-                                format!(
-                                    "Failed to write rendition override stylesheet to {}.",
-                                    path.display()
-                                )
-                            })?;
-                            Some(path)
+                        (true, false) => {
+                            let index_path_from_library_root =
+                                rendition_dir_path_from_library_root.join("index.xhtml");
+                            Self::write_style_index(
+                                epub_info,
+                                style,
+                                &self.library_path,
+                                &index_path_from_library_root,
+                                &rendition_dir_path,
+                                "contents".into(),
+                            )?;
+                            Self::generate_rendition_contents_dir(
+                                epub_info,
+                                style,
+                                &rendition_dir_path,
+                                &self
+                                    .library_path
+                                    .join(&epub_info.raw_rendition.dir_path_from_library_root),
+                            )?;
+                            index_path_from_library_root
                         }
-                        None => None,
-                    };
-
-                    for resource_path in &epub_info.nonspine_resource_paths {
-                        let resource_link_path = contents_dir.join(resource_path);
-                        let resource_link_path_parent = resource_link_path
-                            .parent()
-                            .context("Unreachable: joined path is root.")?;
-                        create_dir_all(resource_link_path_parent).with_context(|| {
-                            format!(
-                                "Failed to create directory {}",
-                                resource_link_path_parent.display()
-                            )
-                        })?;
-
-                        let resource_destination_path = raw_rendition_path.join(resource_path);
-                        create_link(&resource_link_path, &resource_destination_path)?;
-                    }
-                    for (index, spine_item) in epub_info.spine_items.iter().enumerate() {
-                        // Todo: add support for SVG spine items
-                        let raw_spine_item_path = raw_rendition_path.join(&spine_item.path);
-                        let modified_spine_item_path = contents_dir.join(&spine_item.path);
-                        let modified_spine_item_xhtml = xhtml::adjust_spine_xhtml(
-                            epub_info,
-                            &contents_dir,
-                            &raw_spine_item_path,
-                            &modified_spine_item_path,
-                            no_override_stylesheet_path.as_deref(),
-                            override_stylesheet_path.as_deref(),
-                            index,
-                            style,
-                        )?;
-                        let modified_spine_item_path_parent = modified_spine_item_path
-                            .parent()
-                            .context("Unreachable: joined path is root.")?;
-                        create_dir_all(modified_spine_item_path_parent).with_context(|| {
-                            format!(
-                                "Failed to create directory {}",
-                                modified_spine_item_path_parent.display()
-                            )
-                        })?;
-                        write(&modified_spine_item_path, modified_spine_item_xhtml).with_context(
-                            || {
-                                format!(
-                                    "Failed to write file to {}.",
-                                    modified_spine_item_path.display()
-                                )
-                            },
-                        )?;
-                    }
-
-                    let navigation_stylesheet =
-                        crate::epub::navigation::generate_stylesheet(style)?;
-                    let navigation_stylesheet_path = dir_path.join("navigation_styles.css");
-                    write(&navigation_stylesheet_path, navigation_stylesheet).with_context(
-                        || {
-                            format!(
-                                "Failed to write rendition navigation stylesheet to {}.",
-                                navigation_stylesheet_path.display()
-                            )
-                        },
-                    )?;
-
-                    let navigation_script = include_str!("../assets/navigation_script.js");
-                    let navigation_script_path = dir_path.join("navigation_script.js");
-                    write(&navigation_script_path, navigation_script).with_context(|| {
-                        format!(
-                            "Failed to write rendition navigation script to {}.",
-                            navigation_script_path.display()
-                        )
-                    })?;
-                }
-
-                let default_file_path_from_library_root = match style.include_index {
-                    true => {
-                        // Generate index
-                        let index = EpubIndex::from_spine_and_toc(
-                            &epub_info.spine_items,
-                            &epub_info.table_of_contents,
-                        )?;
-                        let index_xhtml = index.to_xhtml(epub_info, style)?;
-                        let index_path_from_library_root =
-                            dir_path_from_library_root.join("index.xhtml");
-                        let index_path = self.library_path.join(&index_path_from_library_root);
-                        write(&index_path, &index_xhtml).with_context(|| {
-                            format!(
-                                "Failed to write rendition index to {}.",
-                                index_path.display()
-                            )
-                        })?;
-
-                        let index_stylesheet = crate::epub::index::generate_stylesheet(style)?;
-                        let index_stylesheet_path = dir_path.join("index_styles.css");
-                        write(&index_stylesheet_path, index_stylesheet).with_context(|| {
-                            format!(
-                                "Failed to write rendition index stylesheet to {}.",
-                                index_stylesheet_path.display()
-                            )
-                        })?;
-
-                        index_path_from_library_root
-                    }
-                    false => match style.uses_raw_contents_dir() {
-                        // This is slightly inefficient, calculating the contents dir redundantly. But would be hard to convince the compiler to go along with defining it elsewhere more efficiently, and this isn't *that* bad, so here it is.
-                        true => epub_info
+                        (false, true) => epub_info
                             .raw_rendition
                             .default_file_path_from_library_root
                             .clone(),
-                        false => dir_path_from_library_root
-                            .join("contents")
-                            .join(&epub_info.first_linear_spine_item_path),
-                    },
-                };
+                        (false, false) => {
+                            Self::generate_rendition_contents_dir(
+                                epub_info,
+                                style,
+                                &rendition_dir_path,
+                                &self
+                                    .library_path
+                                    .join(&epub_info.raw_rendition.dir_path_from_library_root),
+                            )?;
+                            rendition_dir_path_from_library_root
+                                .join("contents")
+                                .join(&epub_info.first_linear_spine_item_path)
+                        }
+                    };
 
                 epub_info.nonraw_renditions.push(EpubRenditionInfo {
                     style: style.clone(),
-                    dir_path_from_library_root,
+                    dir_path_from_library_root: rendition_dir_path_from_library_root,
                     default_file_path_from_library_root,
-                    bytes: get_dir_size(&dir_path)?,
+                    bytes: get_dir_size(&rendition_dir_path)?,
                 });
-
-                write_needed = true;
             }
         }
         if write_needed {

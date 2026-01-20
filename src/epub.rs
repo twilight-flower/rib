@@ -59,15 +59,20 @@ impl EpubTocItem {
                 PathBuf::from(path_split.join("#"))
             }
         };
+
+        let mut children = Vec::new();
+        for source_child in source.children {
+            children.push(Self::from_epub_library_representation(
+                source_child,
+                nesting_level + 1,
+            )?);
+        }
+
         Ok(Self {
             label: source.label,
             path_without_fragment: path,
             path_with_fragment: source.content,
-            children: source
-                .children
-                .into_iter()
-                .map(|child| Self::from_epub_library_representation(child, nesting_level + 1))
-                .collect::<anyhow::Result<Vec<Self>>>()?,
+            children,
             nesting_level,
         })
     }
