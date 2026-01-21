@@ -122,12 +122,6 @@ pub fn create_navigation_wrapper(
                         .attr("href", unwrap_path_utf8(&stylesheet_path_relative)?),
                     |_writer| Ok(()),
                 )?;
-                wrap_xml_element_write(
-                    writer,
-                    XmlEvent::start_element("script")
-                        .attr("src", unwrap_path_utf8(&script_path_relative)?),
-                    |_writer| Ok(()),
-                )?;
                 Ok(())
             })?;
             wrap_xml_element_write(writer, XmlEvent::start_element("body"), |writer| {
@@ -242,6 +236,12 @@ pub fn create_navigation_wrapper(
                         }?;
                         Ok(())
                     },
+                )?;
+                wrap_xml_element_write(
+                    writer,
+                    XmlEvent::start_element("script")
+                        .attr("src", unwrap_path_utf8(&script_path_relative)?),
+                    |_writer| Ok(()),
                 )?;
                 Ok(())
             })?;

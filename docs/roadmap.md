@@ -4,8 +4,6 @@
 
 - Add support for EPUB 3 TOCs, likely via an upstream PR to the `epub` crate.
 - Add support for SVG spine items.
-- Fix the interaction with Firefox where it complains about page-refreshes for no clear reason
-- Figure out and debug Shadows of Amascut not listing a TOC when it has a toc.ncx
 
 # Potential-bugfix exploration
 
