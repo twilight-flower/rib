@@ -2,28 +2,6 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
-// #[derive(Clone, Debug, FromArgs)]
-// /// set book text color
-// #[argh(subcommand, name = "text_color")]
-// struct ArgsStyleTextColorArgs {
-//     #[argh(positional)]
-//     /// color attribute value for book text
-//     style: Option<String>,
-// }
-
-// #[derive(Clone, Debug, FromArgs)]
-// #[argh(subcommand)]
-// enum ArgsStyleSubcommand {
-//     TextColor(ArgsStyleTextColorArgs),
-// }
-
-// #[derive(Clone, Debug, FromArgs)]
-// /// Minimalist EPUB reader.
-// struct Args {
-//     /// individual style(s) to override values of
-//     style: Vec<ArgsStyleSubcommand>,
-// }
-
 #[derive(Clone, Copy, Debug, Subcommand)]
 pub enum ConfigSubcommand {
     /// print path to config file
@@ -41,10 +19,10 @@ pub enum LibrarySubcommand {
         /// clear all books from library
         #[arg(short, long)]
         all: bool,
-        /// integer; clear books until no more than this many remain in the library
+        /// clear books until no more than this many remain in the library [non-negative integer]
         #[arg(short = 'b', long)]
         max_books: Option<usize>,
-        /// integer; clear books until library size is no more than this many bytes
+        /// clear books until library size is no more than this many bytes [non-negative integer]
         #[arg(short = 'B', long)]
         max_bytes: Option<u64>,
     },
@@ -146,8 +124,8 @@ pub struct Cli {
     /// inject navigation when opening book
     #[arg(short = 'n', long)]
     pub inject_navigation: Option<bool>,
-    /// stylesheet(s), by name as defined in config, to open book with
-    #[arg(short = 'S', long)]
+    /// stylesheet(s), by name as defined in config, to open book with [can be passed multiple times]
+    #[arg(short = 'S', long = "stylesheet", value_name = "STYLESHEET")]
     pub stylesheets: Vec<String>,
     /// individual style(s) to set, overriding any values specified in stylesheet(s)
     // (The docstring here is currently ignored due to the flattened layout)

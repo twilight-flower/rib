@@ -13,13 +13,13 @@
 # Release
 
 - Look into crates.io's "Trusted Publishing" feature as an alternative to having `cargo publish` as a manual step in the release process
-- Build msi installer for integration with Winget
-- Add to whatever package managers are convenient to add to, including Winget for Windows, Homebrew for Mac, and the AUR for Linux.
+- Build msi installer for integration with Winget, then submit to Winget
+- Once I've done basic testing on Mac, set up Homebrew packaging
+- Add to whatever other package managers are convenient to add to. Linux AUR? Details TBD.
 
 # Features
 
 - Add more graceful error-handling for failure to open one book in a specified bunch, so the error doesn't prevent other books from being opened
-- Add test to ensure that print-output from `cargo run` and print-output from `cargo run -- help` are identical
 - Allow index to display TOC mapped to spine in the event that it's linear-relative-to-TOC *except for the nonlinear TOC-items*, even if the nonlinear TOC-items are out-of-order, as long as each *individual* nonlinear TOC-item shows up only in one block of TOC
 - Add `library open` command to open library books by ID
 - Add more `config` subcommands. Including `config set [parameter] [value]` for git-style command-line config-setup, and maybe `config edit` or something to that effect to open the config file directly in an editor?
@@ -45,7 +45,7 @@
 - Maybe code up some sort of GUIish manager for people who want to do library-management and/or configuration via GUI rather than CLI? Pretty late in the game if so, though.
 - Maybe move TOC to display above the spine-and-TOC pair, in the index, to improve ergonomics for users uninterested in the guts?
 - Experiment and see if the link color in the black theme should be made lighter
-- Look more into alternatives to `cli-table` for print outputs; possibly just roll my own somehow, even
+- Look more into alternatives to `cli-table` for print outputs; possibly just roll my own, even
 - Consider renaming the CLI `stylesheets` parameter to `stylesheet`, since users will rarely want to use more than one, it might get confusing, and clap's `long = "stylesheet"` option is broken.
 	- Also submit an issue report with clap about that brokenness
 - Consider whether to add styles: line spacing, paragraph spacing, start-of-paragraph indentation
