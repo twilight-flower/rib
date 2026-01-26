@@ -22,7 +22,7 @@ fn get_previous_linear_spine_item_path(
     let mut next_index_to_check = current_spine_index - 1;
     loop {
         match epub_info.spine_items.get(next_index_to_check) {
-            Some(EpubSpineItem { path, linear }) if *linear => return Ok(path),
+            Some(EpubSpineItem { path, linear, .. }) if *linear => return Ok(path),
             Some(_) => next_index_to_check -= 1,
             None => return None.context("Internal error: called get_previous_linear_spine_item_path when no previous linear spine item path could be gotten."),
         }
@@ -37,7 +37,7 @@ fn get_next_linear_spine_item_path(
     let mut next_index_to_check = current_spine_index + 1;
     loop {
         match epub_info.spine_items.get(next_index_to_check) {
-            Some(EpubSpineItem { path, linear }) if *linear => return Ok(path),
+            Some(EpubSpineItem { path, linear, .. }) if *linear => return Ok(path),
             Some(_) => next_index_to_check += 1,
             None => return None.context("Internal error: called get_next_linear_spine_item_path when no next linear spine item path could be gotten."),
         }

@@ -66,7 +66,7 @@ fn generate_stylesheet_link_block(style: &Style, override_book: bool) -> CssBloc
     }
 }
 
-pub fn generate_stylesheet_img_block(style: &Style, override_book: bool) -> CssBlock {
+fn generate_stylesheet_img_block(style: &Style, override_book: bool) -> CssBlock {
     let block_prefix = match override_book {
         true => "img",
         false => ":where(img)",

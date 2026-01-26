@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use epub::doc::EpubDoc;
+use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -21,11 +22,18 @@ use crate::{
     style::Style,
 };
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub enum EpubSpineItemFormat {
+    Svg,
+    Xhtml,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EpubSpineItem {
     pub path: PathBuf,
+    pub format: EpubSpineItemFormat,
     pub linear: bool,
-    // properties can go here later, but ignore them for now
+    // properties can go here later once the rendering is complex enough to handle them, but ignore them for now
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -42,10 +50,11 @@ impl EpubTocItem {
         source: epub::doc::NavPoint,
         nesting_level: u64,
     ) -> anyhow::Result<Self> {
-        let mut path_split = unwrap_path_utf8(&source.content)?
+        let cleaned_path = standardize_path_separators(&source.content.clean());
+        let mut path_split = unwrap_path_utf8(&cleaned_path)?
             .split('#')
             .collect::<Vec<_>>();
-        let path = match path_split.len() {
+        let path_without_fragment = match path_split.len() {
             0 => PathBuf::new(), // This should be possible per the EPUB spec, even if the library is failing to expose it well.
             1 => PathBuf::from(
                 path_split
@@ -70,8 +79,8 @@ impl EpubTocItem {
 
         Ok(Self {
             label: source.label,
-            path_without_fragment: path,
-            path_with_fragment: source.content,
+            path_without_fragment,
+            path_with_fragment: cleaned_path,
             children,
             nesting_level,
         })
@@ -187,12 +196,9 @@ impl EpubInfo {
 
     fn get_epub_cover_path(epub: &mut EpubDoc<BufReader<File>>) -> Option<PathBuf> {
         epub.get_cover_id().and_then(|cover_id| {
-            epub.resources.iter().find_map(|(resource_id, resource)| {
-                match cover_id == **resource_id {
-                    true => Some(standardize_path_separators(&resource.path)),
-                    false => None,
-                }
-            })
+            epub.resources
+                .get(&cover_id)
+                .map(|cover_resource| standardize_path_separators(&cover_resource.path))
         })
     }
 
@@ -201,8 +207,16 @@ impl EpubInfo {
     ) -> anyhow::Result<Vec<EpubSpineItem>> {
         let mut spine_items = Vec::new();
         for item in &epub.spine {
+            let item_resource = epub.resources.get(&item.idref).context(
+                "Internal error: EPUB library failed to get resource for id listed in its spine.",
+            )?;
             spine_items.push(EpubSpineItem {
-                path: standardize_path_separators(&epub.resources.get(&item.idref).context("Internal error: EPUB library failed to get resource for id listed in its spine.")?.path),
+                path: standardize_path_separators(&item_resource.path),
+                format: match item_resource.mime.as_ref() {
+                    "image/svg+xml" => EpubSpineItemFormat::Svg,
+                    "application/xhtml+xml" => EpubSpineItemFormat::Xhtml,
+                    other_mimetype => bail!("Ill-formed EPUB: encountered unexpected media type {other_mimetype} on spine item."),
+                },
                 linear: item.linear,
             });
         }

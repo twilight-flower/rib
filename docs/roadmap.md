@@ -4,6 +4,8 @@
 
 - Add support for EPUB 3 TOCs, likely via an upstream PR to the `epub` crate.
 - Add support for SVG spine items.
+- Fix the case of book-internal iframes between spine items with navigation.
+- Update `epub` crate to include the NCX-path-fix once there's a release with that
 
 # Potential-bugfix exploration
 

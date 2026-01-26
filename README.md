@@ -40,9 +40,9 @@ See [the releases page](https://github.com/twilight-flower/rib/releases) for dow
 
 ### Option 3: Build Manually
 
+The source tarball from the latest release can be downloaded [here](http://github.com/twilight-flower/rib/releases/latest/download/source.tar.gz), or (along with older versions' source tarballs) from [the releases page](https://github.com/twilight-flower/rib/releases). After extracting the source, build via:
+
 ```
-git clone git@github.com:twilight-flower/rib.git
-cd rib
 cargo build --release
 ```
 

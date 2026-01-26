@@ -188,11 +188,12 @@ impl Library {
         style: &Style,
         rendition_dir_path: &Path,
     ) -> anyhow::Result<(Option<PathBuf>, Option<PathBuf>)> {
+        // TODO: have another function for the svg equivalent;
         let (no_override_stylesheet, override_stylesheet) = xhtml::generate_stylesheets(style);
 
         let no_override_stylesheet_path = match no_override_stylesheet {
             Some(sheet) => {
-                let path = rendition_dir_path.join("section_styles_without_override.css");
+                let path = rendition_dir_path.join("xhtml_styles_without_override.css");
                 write(&path, sheet).with_context(|| {
                     format!(
                         "Failed to write rendition no-override stylesheet to {}.",
@@ -206,7 +207,7 @@ impl Library {
 
         let override_stylesheet_path = match override_stylesheet {
             Some(sheet) => {
-                let path = rendition_dir_path.join("section_styles_with_override.css");
+                let path = rendition_dir_path.join("xhtml_styles_with_override.css");
                 write(&path, sheet).with_context(|| {
                     format!(
                         "Failed to write rendition override stylesheet to {}.",

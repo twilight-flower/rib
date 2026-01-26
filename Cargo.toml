@@ -12,7 +12,8 @@ license = "MIT"
 keywords = ["epub", "ebook"]
 categories = ["command-line-utilities"]
 
-exclude = [".github/workflows/release.yml", "docs/release_workflow.md", ".gitignore", "dist-workspace.toml"]
+rust-version = "1.88.0"
+exclude = [".github/workflows/release.yml", "docs/*", ".gitignore", "dist-workspace.toml"]
 
 [dependencies]
 
@@ -29,6 +30,7 @@ xml = "1.2.0"
 
 # Paths
 directories = "6.0.0"
+path-clean = "1.0.1"
 pathdiff = "0.2.3"
 
 # Error handling
