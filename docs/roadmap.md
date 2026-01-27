@@ -6,10 +6,12 @@
 - Add support for SVG spine items.
 - Fix the case of book-internal iframes between spine items with navigation.
 - Update `epub` crate to include the NCX-path-fix once there's a release with that
+- Fix handling of `<br>` tags, which currently are (to browser parsers' eyes) doubled
+	- This is because they're [void elements](https://developer.mozilla.org/en-US/docs/Glossary/Void_element). Probably the answer here is a generalized policy of, when writing void elements, writing them in self-closing form rather than non-self-closing form. Figure out how to make the XML writer vary on that axis.
 
 # Potential-bugfix exploration
 
-- Ensure UTF-16-encoded XHTML/SVG gets reencoded to UTF-8 and has all metadata specifying it as UTF-16 also updated to specify it as UTF-8 instead. <meta> elements in the head, and such.
+- Ensure UTF-16-encoded XHTML/SVG gets reencoded to UTF-8 and has all metadata specifying it as UTF-16 also updated to specify it as UTF-8 instead. `<meta>` elements in the head, and such.
 - Any way to work on Linux if `xdg-open` isn't installed, or to detect its non-installation and print a warning, or to legibly depend on it, or such?
 
 # Release
@@ -34,6 +36,7 @@
 - Add styles: font-family, font-size, opened-link-color, custom CSS
 - Add flag to open to a specific spine-section, probably 1-indexed
 - Render nonlinear spine items at reduced opacity in the index, as a visual indicator of their nonlinearity
+- Focus the inside of the section iframe on load, so that scrolling via page-down works without needing the frame clicked into first
 
 # Feature Consideration/Research
 
@@ -61,3 +64,4 @@
 	- Consider if it's practical to add a dropdown navigation-menu in the style of FFN / AO3, and if so how to do it.
 	- Other?
 - Consider defining the rest of the ProjectDirs fields, not just the application name
+- Reasily-style page-number-display?
