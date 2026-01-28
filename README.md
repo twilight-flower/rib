@@ -1,6 +1,7 @@
 # Rib
 
 [![crates.io](https://img.shields.io/crates/v/rib.svg)](https://crates.io/crates/rib)
+[![sponsors](https://img.shields.io/github/sponsors/twilight-flower)](https://github.com/sponsors/twilight-flower)
 
 Read EPUBs in your web browser!
 
@@ -10,7 +11,7 @@ Tested on Windows and Linux; currently untested on Mac, but theoretically should
 
 ## Usage
 
-Open book in your default web browser with default style settings:
+Open `book.epub` in your default web browser with default style settings:
 
 ```
 rib book.epub
