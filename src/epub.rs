@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     browser,
-    helpers::{get_dir_size, standardize_path_separators},
+    helpers::{RibPathHelpers, get_dir_size},
     library::Library,
     style::Style,
 };
@@ -36,6 +36,12 @@ pub struct EpubSpineItem {
     // properties can go here later once the rendering is complex enough to handle them, but ignore them for now
 }
 
+#[derive(Clone, Debug)]
+pub struct SpineNavigationMap<'a> {
+    pub spine_item: &'a EpubSpineItem,
+    pub navigation_filename: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EpubTocItem {
     label: String,
@@ -51,9 +57,9 @@ impl EpubTocItem {
         nesting_level: u64,
     ) -> anyhow::Result<Self> {
         let path = Utf8PathBuf::try_from(source.content.clean())
-            .context("Ill-formed EPUB: non-UTF-8 path encountered.")?;
-        let cleaned_path = standardize_path_separators(&path);
-        let mut path_split = cleaned_path.as_str().split('#').collect::<Vec<_>>();
+            .context("Ill-formed EPUB: non-UTF-8 path encountered.")?
+            .standardize_separators();
+        let mut path_split = path.as_str().split('#').collect::<Vec<_>>();
         let path_without_fragment = match path_split.len() {
             0 => Utf8PathBuf::new(), // This should be possible per the EPUB spec, even if the library is failing to expose it well.
             1 => Utf8PathBuf::from(
@@ -80,7 +86,7 @@ impl EpubTocItem {
         Ok(Self {
             label: source.label,
             path_without_fragment,
-            path_with_fragment: cleaned_path,
+            path_with_fragment: path,
             children,
             nesting_level,
         })
@@ -200,7 +206,7 @@ impl EpubInfo {
             Some(cover_resource) => {
                 let path = Utf8PathBuf::try_from(cover_resource.path.clone())
                     .context("Ill-formed EPUB: non-UTF-8 path encountered.")?;
-                Ok(Some(standardize_path_separators(&path)))
+                Ok(Some(path.standardize_separators()))
             }
             None => Ok(None),
         }
@@ -217,7 +223,7 @@ impl EpubInfo {
             let item_path = Utf8PathBuf::try_from(item_resource.path.clone())
                 .context("Ill-formed EPUB: non-UTF-8 path encountered.")?;
             spine_items.push(EpubSpineItem {
-                path: standardize_path_separators(&item_path),
+                path: item_path.standardize_separators(),
                 format: match item_resource.mime.as_ref() {
                     "image/svg+xml" => EpubSpineItemFormat::Svg,
                     "application/xhtml+xml" => EpubSpineItemFormat::Xhtml,
@@ -241,7 +247,7 @@ impl EpubInfo {
                 .iter()
                 .any(|spine_item| spine_item.path == resource_path)
             {
-                resource_paths.push(standardize_path_separators(&resource_path));
+                resource_paths.push(resource_path.standardize_separators());
             }
         }
         Ok(resource_paths)
@@ -279,21 +285,19 @@ impl EpubInfo {
         let nonspine_resource_paths = Self::get_epub_nonspine_resource_paths(epub, &spine_items)?;
         let table_of_contents = Self::get_epub_table_of_contents(epub)?;
 
-        let first_linear_spine_item_path = standardize_path_separators(
-            &spine_items
-                .iter()
-                .find(|item| item.linear)
-                .context("Ill-formed EPUB: no linear spine items.")?
-                .path,
-        );
-        let last_linear_spine_item_path = standardize_path_separators(
-            &spine_items
-                .iter()
-                .rev()
-                .find(|item| item.linear)
-                .context("Ill-formed EPUB: no linear spine items.")?
-                .path,
-        );
+        let first_linear_spine_item_path = spine_items
+            .iter()
+            .find(|item| item.linear)
+            .context("Ill-formed EPUB: no linear spine items.")?
+            .path
+            .standardize_separators();
+        let last_linear_spine_item_path = spine_items
+            .iter()
+            .rev()
+            .find(|item| item.linear)
+            .context("Ill-formed EPUB: no linear spine items.")?
+            .path
+            .standardize_separators();
 
         let raw_rendition_default_file_path_from_library_root =
             raw_dir_path_from_library_root.join(&first_linear_spine_item_path);
@@ -358,5 +362,17 @@ impl EpubInfo {
         }
 
         path_under_consideration
+    }
+
+    pub fn get_spine_navigation_maps(&self) -> Vec<SpineNavigationMap<'_>> {
+        let navigation_padding_length = self.spine_items.len().to_string().len();
+        self.spine_items
+            .iter()
+            .enumerate()
+            .map(|(index, spine_item)| SpineNavigationMap {
+                spine_item,
+                navigation_filename: format!("{:0navigation_padding_length$}.xhtml", index),
+            })
+            .collect()
     }
 }

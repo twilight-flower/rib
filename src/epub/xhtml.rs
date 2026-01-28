@@ -8,8 +8,8 @@ use xml::{EmitterConfig, reader::XmlEvent};
 
 use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
-    epub::{EpubInfo, navigation::create_navigation_wrapper},
-    helpers::{consts::XHTML_ENTITIES, wrap_xml_element_write},
+    epub::SpineNavigationMap,
+    helpers::{RibPathHelpers, RibUrlHelpers, consts::XHTML_ENTITIES, wrap_xml_element_write},
     style::Style,
 };
 
@@ -118,11 +118,13 @@ pub fn generate_stylesheets(style: &Style) -> (Option<String>, Option<String>) {
     (no_override_sheet.to_string(), override_sheet.to_string())
 }
 
-fn adjust_xhtml_source(
+pub fn adjust_xhtml_source(
+    contents_dir_path: &Utf8Path,
     source_path: &Utf8Path,
     destination_path: &Utf8Path,
     no_override_stylesheet_path: Option<&Utf8Path>,
     override_stylesheet_path: Option<&Utf8Path>,
+    spine_navigation_maps: &[SpineNavigationMap],
     style: &Style,
 ) -> anyhow::Result<Vec<u8>> {
     let source_file =
@@ -146,6 +148,13 @@ fn adjust_xhtml_source(
         false => "_self",
     };
 
+    let contents_dir_path_parent = contents_dir_path
+        .parent()
+        .context("Internal error: contents dir was root.")?;
+
+    let contents_dir_url = contents_dir_path.to_dir_url()?;
+    let destination_url = destination_path.to_file_url()?;
+
     let destination_path_parent = destination_path
         .parent()
         .context("Internal error: attempted to adjust XHTML with root as its destination path.")?;
@@ -163,27 +172,52 @@ fn adjust_xhtml_source(
                     .as_ref()
                     .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
             {
-                // Rewrite <a> elements to open in appropriate locations: current tab if relative, new tab if absolute
-                let href_value = attributes.iter().find_map(|attribute| {
-                    match attribute.name.local_name == "href" {
-                        true => Some(&attribute.value),
-                        false => None,
-                    }
-                });
-                let target = match href_value {
-                    Some(value) => Some(match Url::parse(value) {
+                // Rewrite <a> elements to two effects.
+                // First, set their targets to appropriate locations: current tab if relative, new tab if absolute
+                // Second, if injecting navigation, have relative hrefs open the target page's associated navigation-page rather than the target page itself
+                let href = attributes
+                    .iter_mut()
+                    .find(|attribute| attribute.name.local_name == "href");
+                let target = match href {
+                    Some(ref attribute) => Some(match Url::parse(&attribute.value) {
                         Ok(_absolute_path) => "_blank".to_string(),
                         Err(url::ParseError::RelativeUrlWithoutBase) => {
                             relative_path_target.to_string()
                         }
                         Err(e) => {
                             return Err(e).with_context(|| {
-                                format!("URL parse error on <a href=\"{value}\">")
+                                format!(r#"URL parse error on <a href="{}">"#, &attribute.value)
                             });
                         }
                     }),
                     None => None,
                 };
+                if let Some(attribute) = href
+                    && style.inject_navigation
+                {
+                    let mut href_url_absolute =
+                        destination_url.join(&attribute.value).with_context(|| {
+                            format!(
+                                "Couldn't parse {} as URL relative to {destination_url}",
+                                &attribute.value
+                            )
+                        })?;
+                    if let Some(href_url_from_contents_dir) =
+                        contents_dir_url.make_relative(&href_url_absolute.without_suffixes())
+                        && let Some(spine_navigation_map) =
+                            spine_navigation_maps.iter().find(|spine_navigation_map| {
+                                spine_navigation_map.spine_item.path == href_url_from_contents_dir
+                            })
+                    {
+                        href_url_absolute.set_path(
+                            contents_dir_path_parent
+                                .join(&spine_navigation_map.navigation_filename)
+                                .as_str(),
+                        );
+                        let url_redirected_to_navigation = destination_url.make_relative(&href_url_absolute).with_context(|| format!("Internal error: failed to get relative URL from {destination_url} to {href_url_absolute}."))?;
+                        attribute.value = url_redirected_to_navigation;
+                    }
+                }
                 if let Some(target_unwrapped) = target {
                     match attributes
                         .iter()
@@ -305,43 +339,4 @@ fn adjust_xhtml_source(
     }
 
     Ok(adjusted_source_buffer_writer.into_inner())
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn adjust_spine_xhtml(
-    epub_info: &EpubInfo,
-    contents_dir_path: &Utf8Path,
-    source_path: &Utf8Path,
-    destination_path: &Utf8Path,
-    no_override_stylesheet_path: Option<&Utf8Path>,
-    override_stylesheet_path: Option<&Utf8Path>,
-    spine_index: usize,
-    style: &Style,
-) -> anyhow::Result<Vec<u8>> {
-    let adjusted_source = adjust_xhtml_source(
-        source_path,
-        destination_path,
-        no_override_stylesheet_path,
-        override_stylesheet_path,
-        style,
-    );
-    match style.inject_navigation {
-        true => {
-            let adjusted_source_string =
-                String::from_utf8(adjusted_source?).with_context(|| {
-                    format!(
-                        "Internal error: {source_path} wasn't encoded to valid UTF-8 on adjustment."
-                    )
-                })?;
-            create_navigation_wrapper(
-                epub_info,
-                contents_dir_path,
-                destination_path,
-                spine_index,
-                style,
-                &adjusted_source_string,
-            )
-        }
-        false => adjusted_source,
-    }
 }

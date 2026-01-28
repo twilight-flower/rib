@@ -12,7 +12,7 @@ use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    epub::{EpubInfo, EpubRenditionInfo, index::EpubIndex, xhtml},
+    epub::{EpubInfo, EpubRenditionInfo, SpineNavigationMap, index::EpubIndex, xhtml},
     helpers::{create_link, get_dir_size},
     style::Style,
 };
@@ -210,11 +210,11 @@ impl Library {
 
     fn link_rendition_contents_nonspine_resources(
         epub_info: &EpubInfo,
-        rendition_contents_dir: &Utf8Path,
+        contents_dir_path: &Utf8Path,
         raw_rendition_path: &Utf8Path,
     ) -> anyhow::Result<()> {
         for resource_path in &epub_info.nonspine_resource_paths {
-            let resource_link_path = rendition_contents_dir.join(resource_path);
+            let resource_link_path = contents_dir_path.join(resource_path);
             let resource_link_path_parent = resource_link_path
                 .parent()
                 .context("Unreachable: joined path is root.")?;
@@ -231,23 +231,23 @@ impl Library {
     fn write_rendition_contents_modified_spine_items(
         epub_info: &EpubInfo,
         style: &Style,
-        rendition_contents_dir: &Utf8Path,
+        contents_dir_path: &Utf8Path,
         raw_rendition_path: &Utf8Path,
         no_override_stylesheet_path: &Option<Utf8PathBuf>,
         override_stylesheet_path: &Option<Utf8PathBuf>,
+        spine_navigation_maps: &[SpineNavigationMap],
     ) -> anyhow::Result<()> {
         // Todo: add support for SVG spine items
-        for (index, spine_item) in epub_info.spine_items.iter().enumerate() {
+        for spine_item in epub_info.spine_items.iter() {
             let raw_spine_item_path = raw_rendition_path.join(&spine_item.path);
-            let modified_spine_item_path = rendition_contents_dir.join(&spine_item.path);
-            let modified_spine_item_xhtml = xhtml::adjust_spine_xhtml(
-                epub_info,
-                rendition_contents_dir,
+            let modified_spine_item_path = contents_dir_path.join(&spine_item.path);
+            let modified_spine_item_xhtml = xhtml::adjust_xhtml_source(
+                contents_dir_path,
                 &raw_spine_item_path,
                 &modified_spine_item_path,
                 no_override_stylesheet_path.as_deref(),
                 override_stylesheet_path.as_deref(),
-                index,
+                spine_navigation_maps,
                 style,
             )?;
             let modified_spine_item_path_parent = modified_spine_item_path
@@ -262,10 +262,31 @@ impl Library {
         Ok(())
     }
 
-    fn write_rendition_contents_navigation_peripherals(
+    fn write_navigation(
+        epub_info: &EpubInfo,
         style: &Style,
         rendition_dir_path: &Utf8Path,
+        spine_navigation_maps: &[SpineNavigationMap],
     ) -> anyhow::Result<()> {
+        for (spine_index, spine_navigation_map) in spine_navigation_maps.iter().enumerate() {
+            let section_path =
+                Utf8Path::new("contents").join(&spine_navigation_map.spine_item.path);
+            let navigation_wrapper_file = crate::epub::navigation::create_navigation_wrapper(
+                epub_info,
+                spine_navigation_maps,
+                spine_index,
+                style,
+                &section_path,
+            )?;
+            let navigation_wrapper_file_path =
+                rendition_dir_path.join(&spine_navigation_map.navigation_filename);
+            write(&navigation_wrapper_file_path, navigation_wrapper_file).with_context(|| {
+                format!(
+                    "Failed to write rendition navigation stylesheet to {navigation_wrapper_file_path}."
+                )
+            })?;
+        }
+
         let navigation_stylesheet = crate::epub::navigation::generate_stylesheet(style)?;
         let navigation_stylesheet_path = rendition_dir_path.join("navigation_styles.css");
         write(&navigation_stylesheet_path, navigation_stylesheet).with_context(|| {
@@ -289,27 +310,29 @@ impl Library {
         rendition_dir_path: &Utf8Path,
         raw_rendition_path: &Utf8Path,
     ) -> anyhow::Result<()> {
-        let rendition_contents_dir = rendition_dir_path.join("contents");
+        let contents_dir_path = rendition_dir_path.join("contents");
 
         let (no_override_stylesheet_path, override_stylesheet_path) =
             Self::write_rendition_contents_stylesheets(style, rendition_dir_path)?;
+        let spine_navigation_maps = epub_info.get_spine_navigation_maps();
 
         Self::link_rendition_contents_nonspine_resources(
             epub_info,
-            &rendition_contents_dir,
+            &contents_dir_path,
             raw_rendition_path,
         )?;
         Self::write_rendition_contents_modified_spine_items(
             epub_info,
             style,
-            &rendition_contents_dir,
+            &contents_dir_path,
             raw_rendition_path,
             &no_override_stylesheet_path,
             &override_stylesheet_path,
+            &spine_navigation_maps,
         )?;
 
         if style.inject_navigation {
-            Self::write_rendition_contents_navigation_peripherals(style, rendition_dir_path)?;
+            Self::write_navigation(epub_info, style, rendition_dir_path, &spine_navigation_maps)?;
         }
 
         Ok(())

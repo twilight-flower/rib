@@ -1,11 +1,10 @@
 use anyhow::Context;
 use camino::Utf8Path;
-use pathdiff::diff_utf8_paths;
 use xml::{EmitterConfig, writer::XmlEvent};
 
 use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
-    epub::{EpubInfo, EpubSpineItem},
+    epub::{EpubInfo, SpineNavigationMap},
     helpers::{
         generate_stylesheet_img_block_unified, generate_stylesheet_link_block_unified,
         wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
@@ -13,30 +12,30 @@ use crate::{
     style::Style,
 };
 
-fn get_previous_linear_spine_item_path(
-    epub_info: &EpubInfo,
+fn get_previous_linear_spine_item_path<'a>(
+    spine_navigation_maps: &'a [SpineNavigationMap],
     current_spine_index: usize,
-) -> anyhow::Result<&Utf8Path> {
+) -> anyhow::Result<&'a str> {
     // Assumption: previous linear spine item path exists.
     let mut next_index_to_check = current_spine_index - 1;
     loop {
-        match epub_info.spine_items.get(next_index_to_check) {
-            Some(EpubSpineItem { path, linear, .. }) if *linear => return Ok(path),
+        match spine_navigation_maps.get(next_index_to_check) {
+            Some(SpineNavigationMap { spine_item, navigation_filename }) if spine_item.linear => return Ok(navigation_filename),
             Some(_) => next_index_to_check -= 1,
             None => return None.context("Internal error: called get_previous_linear_spine_item_path when no previous linear spine item path could be gotten."),
         }
     }
 }
 
-fn get_next_linear_spine_item_path(
-    epub_info: &EpubInfo,
+fn get_next_linear_spine_item_path<'a>(
+    spine_navigation_maps: &'a [SpineNavigationMap],
     current_spine_index: usize,
-) -> anyhow::Result<&Utf8Path> {
+) -> anyhow::Result<&'a str> {
     // Assumption: next linear spine item path exists.
     let mut next_index_to_check = current_spine_index + 1;
     loop {
-        match epub_info.spine_items.get(next_index_to_check) {
-            Some(EpubSpineItem { path, linear, .. }) if *linear => return Ok(path),
+        match spine_navigation_maps.get(next_index_to_check) {
+            Some(SpineNavigationMap { spine_item, navigation_filename }) if spine_item.linear => return Ok(navigation_filename),
             Some(_) => next_index_to_check += 1,
             None => return None.context("Internal error: called get_next_linear_spine_item_path when no next linear spine item path could be gotten."),
         }
@@ -45,11 +44,10 @@ fn get_next_linear_spine_item_path(
 
 pub fn create_navigation_wrapper(
     epub_info: &EpubInfo,
-    contents_dir_path: &Utf8Path,
-    destination_path: &Utf8Path,
+    spine_navigation_maps: &[SpineNavigationMap],
     spine_index: usize,
     style: &Style,
-    source: &str,
+    section_path: &Utf8Path,
 ) -> anyhow::Result<Vec<u8>> {
     let navigation_wrapper_buffer = Vec::new();
     let mut navigation_wrapper_buffer_writer = EmitterConfig::new()
@@ -57,30 +55,6 @@ pub fn create_navigation_wrapper(
         .indent_string("\t")
         .normalize_empty_elements(false) // Needs to be false to avoid problems when page is parsed as non-X HTML due to non-`.xhtml` filename
         .create_writer(navigation_wrapper_buffer);
-
-    let contents_dir_path_parent = contents_dir_path
-        .parent()
-        .context("Internal error: rendition contents dir is root.")?;
-    let destination_path_parent = destination_path.parent().context(
-        "Internal error: attempted to create navigation wrapper with root as its destination path.",
-    )?;
-    // Note: we use `destination_path_parent`, not `destination_path`, as base for relative links out of the XHTML, because `diff_utf8_paths` assumes all its paths are dirs rather than files and so adds an extra `..` component relative to the path-logic that XHTML operates under.
-
-    let stylesheet_path_absolute = contents_dir_path_parent.join("navigation_styles.css");
-    let stylesheet_path_relative = diff_utf8_paths(&stylesheet_path_absolute, destination_path_parent)
-        .with_context(|| {
-        format!(
-            "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
-        )
-    })?;
-
-    let script_path_absolute = contents_dir_path_parent.join("navigation_script.js");
-    let script_path_relative = diff_utf8_paths(&script_path_absolute, destination_path_parent)
-        .with_context(|| {
-            format!(
-                "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
-            )
-        })?;
 
     let first_linear_section_index = epub_info
         .spine_items
@@ -114,7 +88,7 @@ pub fn create_navigation_wrapper(
                     writer,
                     XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
-                        .attr("href", stylesheet_path_relative.as_str()),
+                        .attr("href", "navigation_styles.css"),
                     |_writer| Ok(()),
                 )?;
                 Ok(())
@@ -125,8 +99,7 @@ pub fn create_navigation_wrapper(
                     writer,
                     XmlEvent::start_element("iframe")
                         .attr("id", "section")
-                        // .attr("sandbox", "allow-popups allow-same-origin allow-top-navigation-by-user-activation allow-top-navigation-to-custom-protocols")
-                        .attr("srcdoc", source),
+                        .attr("src", section_path.as_str()),
                     |_writer| Ok(()),
                 )?;
                 wrap_xml_element_write(
@@ -142,46 +115,25 @@ pub fn create_navigation_wrapper(
                             ),
                             false => {
                                 let previous_linear_spine_item_path =
-                                    get_previous_linear_spine_item_path(epub_info, spine_index)?;
-                                let previous_linear_spine_item_path_absolute =
-                                    contents_dir_path.join(previous_linear_spine_item_path);
-                                let previous_linear_spine_item_path_relative = diff_utf8_paths(
-                                    &previous_linear_spine_item_path_absolute,
-                                    destination_path_parent,
-                                )
-                                .with_context(|| {
-                                    format!(
-                                        "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
-                                    )
-                                })?;
+                                    get_previous_linear_spine_item_path(
+                                        spine_navigation_maps,
+                                        spine_index,
+                                    )?;
                                 wrap_xml_element_write(
                                     writer,
                                     XmlEvent::start_element("a")
                                         .attr("class", "navigation-button")
-                                        .attr(
-                                            "href",
-                                            previous_linear_spine_item_path_relative.as_str(),
-                                        ),
+                                        .attr("href", previous_linear_spine_item_path),
                                     |writer| write_xml_characters(writer, "Previous"),
                                 )
                             }
                         }?;
                         if style.include_index {
-                            let index_path_absolute = contents_dir_path_parent.join("index.xhtml");
-                            let index_path_relative = diff_utf8_paths(
-                                &index_path_absolute,
-                                destination_path_parent,
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Internal error: failed to generate path from {destination_path_parent} to {index_path_absolute}."
-                                )
-                            })?;
                             wrap_xml_element_write(
                                 writer,
                                 XmlEvent::start_element("a")
                                     .attr("class", "navigation-button")
-                                    .attr("href", index_path_relative.as_str()),
+                                    .attr("href", "index.xhtml"),
                                 |writer| write_xml_characters(writer, "Index"),
                             )?;
                         }
@@ -194,27 +146,15 @@ pub fn create_navigation_wrapper(
                                 |writer| write_xml_characters(writer, "Next"),
                             ),
                             false => {
-                                let next_linear_spine_item_path =
-                                    get_next_linear_spine_item_path(epub_info, spine_index)?;
-                                let next_linear_spine_item_path_absolute =
-                                    contents_dir_path.join(next_linear_spine_item_path);
-                                let next_linear_spine_item_path_relative = diff_utf8_paths(
-                                    &next_linear_spine_item_path_absolute,
-                                    destination_path_parent,
-                                )
-                                .with_context(|| {
-                                    format!(
-                                        "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
-                                    )
-                                })?;
+                                let next_linear_spine_item_path = get_next_linear_spine_item_path(
+                                    spine_navigation_maps,
+                                    spine_index,
+                                )?;
                                 wrap_xml_element_write(
                                     writer,
                                     XmlEvent::start_element("a")
                                         .attr("class", "navigation-button")
-                                        .attr(
-                                            "href",
-                                            next_linear_spine_item_path_relative.as_str(),
-                                        ),
+                                        .attr("href", next_linear_spine_item_path),
                                     |writer| write_xml_characters(writer, "Next"),
                                 )
                             }
@@ -224,7 +164,7 @@ pub fn create_navigation_wrapper(
                 )?;
                 wrap_xml_element_write(
                     writer,
-                    XmlEvent::start_element("script").attr("src", script_path_relative.as_str()),
+                    XmlEvent::start_element("script").attr("src", "navigation_script.js"),
                     |_writer| Ok(()),
                 )?;
                 Ok(())

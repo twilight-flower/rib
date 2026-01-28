@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use url::Url;
 use xml::{
     EventWriter,
     writer::{XmlEvent, events::StartElementBuilder},
@@ -45,13 +46,34 @@ pub fn get_dir_size(path: &Path) -> anyhow::Result<u64> {
 //   path   //
 //////////////
 
-pub fn standardize_path_separators(pathbuf_in: &Utf8Path) -> Utf8PathBuf {
-    pathbuf_in
-        .components()
-        .fold(Utf8PathBuf::new(), |mut pathbuf_out, component| {
-            pathbuf_out.push(component);
-            pathbuf_out
-        })
+pub trait RibPathHelpers {
+    fn standardize_separators(&self) -> Utf8PathBuf;
+    fn to_file_url(&self) -> anyhow::Result<Url>;
+    fn to_dir_url(&self) -> anyhow::Result<Url>;
+}
+
+impl RibPathHelpers for Utf8Path {
+    fn standardize_separators(&self) -> Utf8PathBuf {
+        self.components()
+            .fold(Utf8PathBuf::new(), |mut pathbuf_out, component| {
+                pathbuf_out.push(component);
+                pathbuf_out
+            })
+    }
+
+    fn to_file_url(&self) -> anyhow::Result<Url> {
+        match Url::from_file_path(self) {
+            Ok(url) => Ok(url),
+            Err(()) => bail!("Internal error: couldn't convert path {self} to file URL."),
+        }
+    }
+
+    fn to_dir_url(&self) -> anyhow::Result<Url> {
+        match Url::from_directory_path(self) {
+            Ok(url) => Ok(url),
+            Err(()) => bail!("Internal error: couldn't convert path {self} to file URL."),
+        }
+    }
 }
 
 ///////////////
@@ -60,6 +82,23 @@ pub fn standardize_path_separators(pathbuf_in: &Utf8Path) -> Utf8PathBuf {
 
 pub const fn return_true() -> bool {
     true
+}
+
+/////////////
+//   url   //
+/////////////
+
+pub trait RibUrlHelpers {
+    fn without_suffixes(&self) -> Self;
+}
+
+impl RibUrlHelpers for Url {
+    fn without_suffixes(&self) -> Self {
+        let mut suffixless_self = self.clone();
+        suffixless_self.set_fragment(None);
+        suffixless_self.set_query(None);
+        suffixless_self
+    }
 }
 
 /////////////
@@ -161,7 +200,7 @@ pub fn create_link(source: &Utf8Path, destination: &Utf8Path) -> anyhow::Result<
         .with_context(|| format!("Failed to link {source} to {destination}."))?;
 
     #[cfg(not(any(windows, unix)))]
-    anyhow::anyhow!("Unable to link {source} to {destination}: unsupported OS.");
+    bail!("Unable to link {source} to {destination}: unsupported OS.");
 
     Ok(())
 }
