@@ -1,7 +1,6 @@
-use std::path::Path;
-
 use anyhow::Context;
-use pathdiff::diff_paths;
+use camino::Utf8Path;
+use pathdiff::diff_utf8_paths;
 use xml::{EmitterConfig, writer::XmlEvent};
 
 use crate::{
@@ -9,7 +8,7 @@ use crate::{
     epub::{EpubInfo, EpubSpineItem},
     helpers::{
         generate_stylesheet_img_block_unified, generate_stylesheet_link_block_unified,
-        unwrap_path_utf8, wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
     },
     style::Style,
 };
@@ -17,7 +16,7 @@ use crate::{
 fn get_previous_linear_spine_item_path(
     epub_info: &EpubInfo,
     current_spine_index: usize,
-) -> anyhow::Result<&Path> {
+) -> anyhow::Result<&Utf8Path> {
     // Assumption: previous linear spine item path exists.
     let mut next_index_to_check = current_spine_index - 1;
     loop {
@@ -32,7 +31,7 @@ fn get_previous_linear_spine_item_path(
 fn get_next_linear_spine_item_path(
     epub_info: &EpubInfo,
     current_spine_index: usize,
-) -> anyhow::Result<&Path> {
+) -> anyhow::Result<&Utf8Path> {
     // Assumption: next linear spine item path exists.
     let mut next_index_to_check = current_spine_index + 1;
     loop {
@@ -46,8 +45,8 @@ fn get_next_linear_spine_item_path(
 
 pub fn create_navigation_wrapper(
     epub_info: &EpubInfo,
-    contents_dir_path: &Path,
-    destination_path: &Path,
+    contents_dir_path: &Utf8Path,
+    destination_path: &Utf8Path,
     spine_index: usize,
     style: &Style,
     source: &str,
@@ -65,25 +64,21 @@ pub fn create_navigation_wrapper(
     let destination_path_parent = destination_path.parent().context(
         "Internal error: attempted to create navigation wrapper with root as its destination path.",
     )?;
-    // Note: we use `destination_path_parent`, not `destination_path`, as base for relative links out of the XHTML, because `diff_paths` assumes all its paths are dirs rather than files and so adds an extra `..` component relative to the path-logic that XHTML operates under.
+    // Note: we use `destination_path_parent`, not `destination_path`, as base for relative links out of the XHTML, because `diff_utf8_paths` assumes all its paths are dirs rather than files and so adds an extra `..` component relative to the path-logic that XHTML operates under.
 
     let stylesheet_path_absolute = contents_dir_path_parent.join("navigation_styles.css");
-    let stylesheet_path_relative = diff_paths(&stylesheet_path_absolute, destination_path_parent)
+    let stylesheet_path_relative = diff_utf8_paths(&stylesheet_path_absolute, destination_path_parent)
         .with_context(|| {
         format!(
-            "Internal error: failed to generate path from {} to {}.",
-            destination_path_parent.display(),
-            stylesheet_path_absolute.display()
+            "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
         )
     })?;
 
     let script_path_absolute = contents_dir_path_parent.join("navigation_script.js");
-    let script_path_relative = diff_paths(&script_path_absolute, destination_path_parent)
+    let script_path_relative = diff_utf8_paths(&script_path_absolute, destination_path_parent)
         .with_context(|| {
             format!(
-                "Internal error: failed to generate path from {} to {}.",
-                destination_path_parent.display(),
-                script_path_absolute.display()
+                "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
             )
         })?;
 
@@ -119,7 +114,7 @@ pub fn create_navigation_wrapper(
                     writer,
                     XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
-                        .attr("href", unwrap_path_utf8(&stylesheet_path_relative)?),
+                        .attr("href", stylesheet_path_relative.as_str()),
                     |_writer| Ok(()),
                 )?;
                 Ok(())
@@ -150,15 +145,13 @@ pub fn create_navigation_wrapper(
                                     get_previous_linear_spine_item_path(epub_info, spine_index)?;
                                 let previous_linear_spine_item_path_absolute =
                                     contents_dir_path.join(previous_linear_spine_item_path);
-                                let previous_linear_spine_item_path_relative = diff_paths(
+                                let previous_linear_spine_item_path_relative = diff_utf8_paths(
                                     &previous_linear_spine_item_path_absolute,
                                     destination_path_parent,
                                 )
                                 .with_context(|| {
                                     format!(
-                                        "Internal error: failed to generate path from {} to {}.",
-                                        destination_path_parent.display(),
-                                        stylesheet_path_absolute.display()
+                                        "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
                                     )
                                 })?;
                                 wrap_xml_element_write(
@@ -167,9 +160,7 @@ pub fn create_navigation_wrapper(
                                         .attr("class", "navigation-button")
                                         .attr(
                                             "href",
-                                            unwrap_path_utf8(
-                                                &previous_linear_spine_item_path_relative,
-                                            )?,
+                                            previous_linear_spine_item_path_relative.as_str(),
                                         ),
                                     |writer| write_xml_characters(writer, "Previous"),
                                 )
@@ -177,22 +168,20 @@ pub fn create_navigation_wrapper(
                         }?;
                         if style.include_index {
                             let index_path_absolute = contents_dir_path_parent.join("index.xhtml");
-                            let index_path_relative = diff_paths(
+                            let index_path_relative = diff_utf8_paths(
                                 &index_path_absolute,
                                 destination_path_parent,
                             )
                             .with_context(|| {
                                 format!(
-                                    "Internal error: failed to generate path from {} to {}.",
-                                    destination_path_parent.display(),
-                                    index_path_absolute.display()
+                                    "Internal error: failed to generate path from {destination_path_parent} to {index_path_absolute}."
                                 )
                             })?;
                             wrap_xml_element_write(
                                 writer,
                                 XmlEvent::start_element("a")
                                     .attr("class", "navigation-button")
-                                    .attr("href", unwrap_path_utf8(&index_path_relative)?),
+                                    .attr("href", index_path_relative.as_str()),
                                 |writer| write_xml_characters(writer, "Index"),
                             )?;
                         }
@@ -209,15 +198,13 @@ pub fn create_navigation_wrapper(
                                     get_next_linear_spine_item_path(epub_info, spine_index)?;
                                 let next_linear_spine_item_path_absolute =
                                     contents_dir_path.join(next_linear_spine_item_path);
-                                let next_linear_spine_item_path_relative = diff_paths(
+                                let next_linear_spine_item_path_relative = diff_utf8_paths(
                                     &next_linear_spine_item_path_absolute,
                                     destination_path_parent,
                                 )
                                 .with_context(|| {
                                     format!(
-                                        "Internal error: failed to generate path from {} to {}.",
-                                        destination_path_parent.display(),
-                                        stylesheet_path_absolute.display()
+                                        "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
                                     )
                                 })?;
                                 wrap_xml_element_write(
@@ -226,9 +213,7 @@ pub fn create_navigation_wrapper(
                                         .attr("class", "navigation-button")
                                         .attr(
                                             "href",
-                                            unwrap_path_utf8(
-                                                &next_linear_spine_item_path_relative,
-                                            )?,
+                                            next_linear_spine_item_path_relative.as_str(),
                                         ),
                                     |writer| write_xml_characters(writer, "Next"),
                                 )
@@ -239,8 +224,7 @@ pub fn create_navigation_wrapper(
                 )?;
                 wrap_xml_element_write(
                     writer,
-                    XmlEvent::start_element("script")
-                        .attr("src", unwrap_path_utf8(&script_path_relative)?),
+                    XmlEvent::start_element("script").attr("src", script_path_relative.as_str()),
                     |_writer| Ok(()),
                 )?;
                 Ok(())

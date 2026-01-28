@@ -19,19 +19,20 @@ exclude = [".github/workflows/release.yml", "docs/*", ".gitignore", "dist-worksp
 
 # IO
 clap = { version = "4.5.54", features = ["derive"] }
-cli-table = {version = "0.5.0", default-features = false} # Disabled features: csv, derive
+cli-table = { version = "0.5.0", default-features = false } # Disabled features: csv, derive
 epub = "2.1.5"
 sanitize-filename = "0.6.0"
-serde = {version = "1.0.228", features = ["derive"]}
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.148"
-toml = {version = "0.9.10", default-features = false, features = ["std", "serde", "parse"]} # Disabled feature: display
+toml = { version = "0.9.10", default-features = false, features = ["std", "serde", "parse"] } # Disabled feature: display
 url = "2.5.8"
 xml = "1.2.0"
 
 # Paths
+camino = { version = "1.2.2", features = ["serde1"] }
 directories = "6.0.0"
 path-clean = "1.0.1"
-pathdiff = "0.2.3"
+pathdiff = { version = "0.2.3", features = ["camino"] }
 
 # Error handling
 anyhow = "1.0.100"

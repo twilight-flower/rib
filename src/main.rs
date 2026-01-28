@@ -9,6 +9,7 @@ mod library;
 mod style;
 
 use anyhow::Context;
+use camino::Utf8PathBuf;
 use clap::Parser;
 use directories::ProjectDirs;
 
@@ -33,7 +34,15 @@ fn main() -> anyhow::Result<()> {
     let config_path = project_dirs.config_dir().join("config.toml");
     let config = Config::open(&config_path)?;
 
-    let library_path = project_dirs.data_local_dir().join("library");
+    let library_path = {
+        let library_std_path = project_dirs.data_local_dir().join("library");
+        Utf8PathBuf::try_from(library_std_path.clone()).with_context(|| {
+            format!(
+                "Couldn't get library path {} as UTF-8.",
+                library_std_path.display()
+            )
+        })?
+    };
     let mut library = Library::open(library_path.clone())?;
 
     match args.subcommand {
@@ -56,7 +65,7 @@ fn main() -> anyhow::Result<()> {
                 },
                 LibrarySubcommand::List => library.list(),
                 LibrarySubcommand::Path => {
-                    println!("{}", library_path.display());
+                    println!("{library_path}");
                     Ok(())
                 }
             },

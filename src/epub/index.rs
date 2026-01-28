@@ -1,10 +1,7 @@
-use std::{
-    cmp::Ordering,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::{cmp::Ordering, io::Write};
 
 use anyhow::Context;
+use camino::{Utf8Path, Utf8PathBuf};
 use xml::{EventWriter, writer::XmlEvent};
 
 use crate::{
@@ -12,7 +9,7 @@ use crate::{
     epub::{EpubInfo, EpubSpineItem, EpubTocItem},
     helpers::{
         generate_stylesheet_img_block_unified, generate_stylesheet_link_block_unified,
-        unwrap_path_utf8, wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
     },
     style::Style,
 };
@@ -36,7 +33,7 @@ impl<'a> EpubIndex<'a> {
                 .with_context(|| {
                     format!(
                         "Ill-formed EPUB: TOC contains path {}, which doesn't appear in spine.",
-                        toc_item.path_without_fragment.display()
+                        toc_item.path_without_fragment,
                     )
                 })?;
             if toc_item_spine_index < most_recent_spine_index {
@@ -93,7 +90,7 @@ impl<'a> EpubIndex<'a> {
     >(
         writer: &mut EventWriter<W>,
         spine_associated_toc_items_iter: &mut std::iter::Peekable<T>,
-        rendition_contents_dir: &Path,
+        rendition_contents_dir: &Utf8Path,
         current_ul_nesting_level: u64,
     ) -> anyhow::Result<()> {
         while let Some(next_toc_item) = spine_associated_toc_items_iter.peek() {
@@ -117,9 +114,9 @@ impl<'a> EpubIndex<'a> {
                             writer,
                             XmlEvent::start_element("a").attr(
                                 "href",
-                                unwrap_path_utf8(
-                                    &rendition_contents_dir.join(&toc_item.path_with_fragment),
-                                )?,
+                                rendition_contents_dir
+                                    .join(&toc_item.path_with_fragment)
+                                    .as_str(),
                             ),
                             |writer| write_xml_characters(writer, &toc_item.label),
                         )
@@ -134,7 +131,7 @@ impl<'a> EpubIndex<'a> {
     fn list_toc_items_for_linear_index_spine_entry<W: Write>(
         writer: &mut EventWriter<W>,
         spine_associated_toc_items: &[&'a EpubTocItem],
-        rendition_contents_dir: &Path,
+        rendition_contents_dir: &Utf8Path,
     ) -> anyhow::Result<()> {
         Self::list_toc_items_for_linear_index_spine_entry_recursive(
             writer,
@@ -147,7 +144,7 @@ impl<'a> EpubIndex<'a> {
     fn list_toc_items_for_nonlinear_index<W: Write>(
         writer: &mut EventWriter<W>,
         toc: &Vec<&EpubTocItem>,
-        rendition_contents_dir: &Path,
+        rendition_contents_dir: &Utf8Path,
     ) -> anyhow::Result<()> {
         for toc_item in toc {
             wrap_xml_element_write(writer, XmlEvent::start_element("li"), |writer| {
@@ -155,9 +152,9 @@ impl<'a> EpubIndex<'a> {
                     writer,
                     XmlEvent::start_element("a").attr(
                         "href",
-                        unwrap_path_utf8(
-                            &rendition_contents_dir.join(&toc_item.path_with_fragment),
-                        )?,
+                        rendition_contents_dir
+                            .join(&toc_item.path_with_fragment)
+                            .as_str(),
                     ),
                     |writer| write_xml_characters(writer, &toc_item.label),
                 )
@@ -178,7 +175,7 @@ impl<'a> EpubIndex<'a> {
     pub fn to_xhtml(
         &self,
         epub_info: &EpubInfo,
-        rendition_contents_dir_relative_path: PathBuf,
+        rendition_contents_dir_relative_path: Utf8PathBuf,
     ) -> anyhow::Result<Vec<u8>> {
         let xhtml_buffer = Vec::new();
         let mut writer = xml::EmitterConfig::new()
@@ -229,9 +226,9 @@ impl<'a> EpubIndex<'a> {
                                 .attr("alt", "book cover image")
                                 .attr(
                                     "src",
-                                    unwrap_path_utf8(
-                                        &rendition_contents_dir_relative_path.join(cover_path),
-                                    )?,
+                                    rendition_contents_dir_relative_path
+                                        .join(cover_path)
+                                        .as_str(),
                                 ),
                             |_writer| Ok(()),
                         )?;
@@ -241,10 +238,9 @@ impl<'a> EpubIndex<'a> {
                             writer,
                             XmlEvent::start_element("a").attr(
                                 "href",
-                                unwrap_path_utf8(
-                                    &rendition_contents_dir_relative_path
-                                        .join(&epub_info.first_linear_spine_item_path),
-                                )?,
+                                rendition_contents_dir_relative_path
+                                    .join(&epub_info.first_linear_spine_item_path)
+                                    .as_str(),
                             ),
                             |writer| write_xml_characters(writer, "Start"),
                         )
@@ -255,10 +251,9 @@ impl<'a> EpubIndex<'a> {
                             writer,
                             XmlEvent::start_element("a").attr(
                                 "href",
-                                unwrap_path_utf8(
-                                    &rendition_contents_dir_relative_path
-                                        .join(&epub_info.last_linear_spine_item_path),
-                                )?,
+                                rendition_contents_dir_relative_path
+                                    .join(&epub_info.last_linear_spine_item_path)
+                                    .as_str(),
                             ),
                             |writer| write_xml_characters(writer, "End"),
                         )
@@ -302,8 +297,8 @@ impl<'a> EpubIndex<'a> {
                                                                 writer,
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
-                                                                    wrap_xml_element_write(writer, XmlEvent::start_element("a").attr("href", unwrap_path_utf8(&rendition_contents_dir_relative_path.join(&spine_item.path))?), |writer| {
-                                                                        write_xml_characters(writer, unwrap_path_utf8(&spine_item.path)?)
+                                                                    wrap_xml_element_write(writer, XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
+                                                                        write_xml_characters(writer, spine_item.path.as_str())
                                                                     })
                                                                 },
                                                             )
@@ -383,8 +378,8 @@ impl<'a> EpubIndex<'a> {
                                                                 writer,
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
-                                                                    wrap_xml_element_write(writer, XmlEvent::start_element("a").attr("href", unwrap_path_utf8(&rendition_contents_dir_relative_path.join(&spine_item.path))?), |writer| {
-                                                                        write_xml_characters(writer, unwrap_path_utf8(&spine_item.path)?)
+                                                                    wrap_xml_element_write(writer, XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
+                                                                        write_xml_characters(writer, spine_item.path.as_str())
                                                                     })
                                                                 },
                                                             )?;

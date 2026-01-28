@@ -2,11 +2,11 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{File, create_dir_all, read_to_string, remove_dir_all, write},
     io::BufReader,
-    path::{Path, PathBuf},
     time::SystemTime,
 };
 
 use anyhow::Context;
+use camino::{Utf8Path, Utf8PathBuf};
 use cli_table::{Cell, Table};
 use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
@@ -26,9 +26,9 @@ enum LibraryBookInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Library {
     #[serde(skip)]
-    pub library_path: PathBuf,
+    pub library_path: Utf8PathBuf,
     #[serde(skip)]
-    index_path: PathBuf,
+    index_path: Utf8PathBuf,
     #[serde(default)]
     books: HashMap<String, LibraryBookInfo>,
 }
@@ -36,7 +36,7 @@ pub struct Library {
 impl Library {
     // Open library
 
-    fn with_paths(self, library_path: PathBuf, index_path: PathBuf) -> Self {
+    fn with_paths(self, library_path: Utf8PathBuf, index_path: Utf8PathBuf) -> Self {
         Self {
             library_path,
             index_path,
@@ -51,7 +51,7 @@ impl Library {
                     Ok(_) => (),
                     Err(_) => println!(
                         "Warning: failed to write library index to {}. Library index may be nonexistent or ill-formed on next program run.",
-                        self.index_path.display()
+                        self.index_path
                     ),
                 },
                 Err(_) => println!(
@@ -60,12 +60,12 @@ impl Library {
             },
             Err(_) => println!(
                 "Warning: couldn't create library directory {}.",
-                self.library_path.display()
+                self.library_path
             ),
         }
     }
 
-    fn new(library_path: PathBuf, index_path: PathBuf) -> Self {
+    fn new(library_path: Utf8PathBuf, index_path: Utf8PathBuf) -> Self {
         let new_library = Self {
             library_path,
             index_path,
@@ -75,7 +75,7 @@ impl Library {
         new_library
     }
 
-    pub fn open(library_dir_path: PathBuf) -> anyhow::Result<Self> {
+    pub fn open(library_dir_path: Utf8PathBuf) -> anyhow::Result<Self> {
         let index_path = library_dir_path.join("library_index.json");
         Ok(match read_to_string(&index_path) {
             Ok(index_string) => match serde_json::from_str::<Self>(&index_string) {
@@ -84,8 +84,7 @@ impl Library {
                 }
                 Err(_) => {
                     println!(
-                        "Warning: library index at {} is ill-formed. Deleting library and creating new library index.",
-                        index_path.display()
+                        "Warning: library index at {index_path} is ill-formed. Deleting library and creating new library index."
                     ); // Add y/n prompt for this in case people need the cache for something?
                     remove_dir_all(&library_dir_path).context("Failed to delete library.")?;
                     Self::new(library_dir_path, index_path)
@@ -93,8 +92,7 @@ impl Library {
             },
             Err(_) => {
                 println!(
-                    "Couldn't read library index at {}. Creating new library index.",
-                    index_path.display()
+                    "Couldn't read library index at {index_path}. Creating new library index."
                 );
                 Self::new(library_dir_path, index_path)
             }
@@ -103,10 +101,10 @@ impl Library {
 
     // Open books
 
-    pub fn get_internal_path_from_id(&self, id: &str) -> PathBuf {
+    pub fn get_internal_path_from_id(&self, id: &str) -> Utf8PathBuf {
         let sanitized_id = sanitize_filename::sanitize(id);
 
-        let mut path_under_consideration = PathBuf::from(&sanitized_id);
+        let mut path_under_consideration = Utf8PathBuf::from(&sanitized_id);
         let mut numeric_extension = 1;
         while self
             .books
@@ -117,7 +115,8 @@ impl Library {
             })
         {
             numeric_extension += 1;
-            path_under_consideration = PathBuf::from(format!("{sanitized_id}_{numeric_extension}"));
+            path_under_consideration =
+                Utf8PathBuf::from(format!("{sanitized_id}_{numeric_extension}"));
         }
 
         path_under_consideration
@@ -155,30 +154,23 @@ impl Library {
     fn write_style_index(
         epub_info: &EpubInfo,
         style: &Style,
-        library_path: &Path,
-        index_path_from_library_root: &Path,
-        rendition_dir_path: &Path,
-        rendition_contents_dir_path_from_rendition_dir: PathBuf,
+        library_path: &Utf8Path,
+        index_path_from_library_root: &Utf8Path,
+        rendition_dir_path: &Utf8Path,
+        rendition_contents_dir_path_from_rendition_dir: Utf8PathBuf,
     ) -> anyhow::Result<()> {
         let index =
             EpubIndex::from_spine_and_toc(&epub_info.spine_items, &epub_info.table_of_contents)?;
         let index_xhtml =
             index.to_xhtml(epub_info, rendition_contents_dir_path_from_rendition_dir)?;
         let index_path = library_path.join(index_path_from_library_root);
-        write(&index_path, &index_xhtml).with_context(|| {
-            format!(
-                "Failed to write rendition index to {}.",
-                index_path.display()
-            )
-        })?;
+        write(&index_path, &index_xhtml)
+            .with_context(|| format!("Failed to write rendition index to {index_path}."))?;
 
         let index_stylesheet = crate::epub::index::generate_stylesheet(style)?;
         let index_stylesheet_path = rendition_dir_path.join("index_styles.css");
         write(&index_stylesheet_path, index_stylesheet).with_context(|| {
-            format!(
-                "Failed to write rendition index stylesheet to {}.",
-                index_stylesheet_path.display()
-            )
+            format!("Failed to write rendition index stylesheet to {index_stylesheet_path}.")
         })?;
 
         Ok(())
@@ -186,8 +178,8 @@ impl Library {
 
     fn write_rendition_contents_stylesheets(
         style: &Style,
-        rendition_dir_path: &Path,
-    ) -> anyhow::Result<(Option<PathBuf>, Option<PathBuf>)> {
+        rendition_dir_path: &Utf8Path,
+    ) -> anyhow::Result<(Option<Utf8PathBuf>, Option<Utf8PathBuf>)> {
         // TODO: have another function for the svg equivalent;
         let (no_override_stylesheet, override_stylesheet) = xhtml::generate_stylesheets(style);
 
@@ -195,10 +187,7 @@ impl Library {
             Some(sheet) => {
                 let path = rendition_dir_path.join("xhtml_styles_without_override.css");
                 write(&path, sheet).with_context(|| {
-                    format!(
-                        "Failed to write rendition no-override stylesheet to {}.",
-                        path.display()
-                    )
+                    format!("Failed to write rendition no-override stylesheet to {path}.")
                 })?;
                 Some(path)
             }
@@ -209,10 +198,7 @@ impl Library {
             Some(sheet) => {
                 let path = rendition_dir_path.join("xhtml_styles_with_override.css");
                 write(&path, sheet).with_context(|| {
-                    format!(
-                        "Failed to write rendition override stylesheet to {}.",
-                        path.display()
-                    )
+                    format!("Failed to write rendition override stylesheet to {path}.")
                 })?;
                 Some(path)
             }
@@ -224,8 +210,8 @@ impl Library {
 
     fn link_rendition_contents_nonspine_resources(
         epub_info: &EpubInfo,
-        rendition_contents_dir: &Path,
-        raw_rendition_path: &Path,
+        rendition_contents_dir: &Utf8Path,
+        raw_rendition_path: &Utf8Path,
     ) -> anyhow::Result<()> {
         for resource_path in &epub_info.nonspine_resource_paths {
             let resource_link_path = rendition_contents_dir.join(resource_path);
@@ -233,10 +219,7 @@ impl Library {
                 .parent()
                 .context("Unreachable: joined path is root.")?;
             create_dir_all(resource_link_path_parent).with_context(|| {
-                format!(
-                    "Failed to create directory {}",
-                    resource_link_path_parent.display()
-                )
+                format!("Failed to create directory {resource_link_path_parent}")
             })?;
 
             let resource_destination_path = raw_rendition_path.join(resource_path);
@@ -248,10 +231,10 @@ impl Library {
     fn write_rendition_contents_modified_spine_items(
         epub_info: &EpubInfo,
         style: &Style,
-        rendition_contents_dir: &Path,
-        raw_rendition_path: &Path,
-        no_override_stylesheet_path: &Option<PathBuf>,
-        override_stylesheet_path: &Option<PathBuf>,
+        rendition_contents_dir: &Utf8Path,
+        raw_rendition_path: &Utf8Path,
+        no_override_stylesheet_path: &Option<Utf8PathBuf>,
+        override_stylesheet_path: &Option<Utf8PathBuf>,
     ) -> anyhow::Result<()> {
         // Todo: add support for SVG spine items
         for (index, spine_item) in epub_info.spine_items.iter().enumerate() {
@@ -271,41 +254,30 @@ impl Library {
                 .parent()
                 .context("Unreachable: joined path is root.")?;
             create_dir_all(modified_spine_item_path_parent).with_context(|| {
-                format!(
-                    "Failed to create directory {}",
-                    modified_spine_item_path_parent.display()
-                )
+                format!("Failed to create directory {modified_spine_item_path_parent}")
             })?;
-            write(&modified_spine_item_path, modified_spine_item_xhtml).with_context(|| {
-                format!(
-                    "Failed to write file to {}.",
-                    modified_spine_item_path.display()
-                )
-            })?;
+            write(&modified_spine_item_path, modified_spine_item_xhtml)
+                .with_context(|| format!("Failed to write file to {modified_spine_item_path}."))?;
         }
         Ok(())
     }
 
     fn write_rendition_contents_navigation_peripherals(
         style: &Style,
-        rendition_dir_path: &Path,
+        rendition_dir_path: &Utf8Path,
     ) -> anyhow::Result<()> {
         let navigation_stylesheet = crate::epub::navigation::generate_stylesheet(style)?;
         let navigation_stylesheet_path = rendition_dir_path.join("navigation_styles.css");
         write(&navigation_stylesheet_path, navigation_stylesheet).with_context(|| {
             format!(
-                "Failed to write rendition navigation stylesheet to {}.",
-                navigation_stylesheet_path.display()
+                "Failed to write rendition navigation stylesheet to {navigation_stylesheet_path}."
             )
         })?;
 
         let navigation_script = include_str!("../assets/navigation_script.js");
         let navigation_script_path = rendition_dir_path.join("navigation_script.js");
         write(&navigation_script_path, navigation_script).with_context(|| {
-            format!(
-                "Failed to write rendition navigation script to {}.",
-                navigation_script_path.display()
-            )
+            format!("Failed to write rendition navigation script to {navigation_script_path}.")
         })?;
 
         Ok(())
@@ -314,8 +286,8 @@ impl Library {
     fn generate_rendition_contents_dir(
         epub_info: &EpubInfo,
         style: &Style,
-        rendition_dir_path: &Path,
-        raw_rendition_path: &Path,
+        rendition_dir_path: &Utf8Path,
+        raw_rendition_path: &Utf8Path,
     ) -> anyhow::Result<()> {
         let rendition_contents_dir = rendition_dir_path.join("contents");
 
@@ -419,7 +391,7 @@ impl Library {
                     style: style.clone(),
                     dir_path_from_library_root: rendition_dir_path_from_library_root,
                     default_file_path_from_library_root,
-                    bytes: get_dir_size(&rendition_dir_path)?,
+                    bytes: get_dir_size(rendition_dir_path.as_ref())?,
                 });
             }
         }
@@ -443,7 +415,7 @@ impl Library {
         let target_rendition = epub_info.find_rendition(style).with_context(|| {
             format!("Internal error: tried to open book id {id} with an unregistered style.")
         })?;
-        target_rendition.open_in_browser(&self.library_path, browser)?;
+        target_rendition.open_in_browser(self.library_path.as_ref(), browser)?;
         match epub_info.last_opened_time == request_time {
             true => epub_info.last_opened_styles.push(style.clone()),
             false => {
@@ -499,11 +471,7 @@ impl Library {
         let book_dir = self.library_path.join(&epub_info.path_from_library_root);
         if book_dir.is_dir() {
             remove_dir_all(&book_dir).with_context(|| {
-                format!(
-                    "Failed to remove {} from {}.",
-                    epub_info.title,
-                    book_dir.display()
-                )
+                format!("Failed to remove {} from {book_dir}.", epub_info.title,)
             })?;
         } // If it exists but isn't a dir, maybe have handling for that to avoid later messes?
         Ok(())

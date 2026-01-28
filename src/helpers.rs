@@ -3,10 +3,11 @@ pub mod consts;
 use std::{
     fs::{read_dir, symlink_metadata},
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use anyhow::{Context, bail};
+use camino::{Utf8Path, Utf8PathBuf};
 use xml::{
     EventWriter,
     writer::{XmlEvent, events::StartElementBuilder},
@@ -44,18 +45,13 @@ pub fn get_dir_size(path: &Path) -> anyhow::Result<u64> {
 //   path   //
 //////////////
 
-pub fn standardize_path_separators(pathbuf_in: &Path) -> PathBuf {
+pub fn standardize_path_separators(pathbuf_in: &Utf8Path) -> Utf8PathBuf {
     pathbuf_in
         .components()
-        .fold(PathBuf::new(), |mut pathbuf_out, component| {
+        .fold(Utf8PathBuf::new(), |mut pathbuf_out, component| {
             pathbuf_out.push(component);
             pathbuf_out
         })
-}
-
-pub fn unwrap_path_utf8(path: &Path) -> anyhow::Result<&str> {
-    path.to_str()
-        .context("Ill-formed EPUB: non-UTF-8 path encountered.")
 }
 
 ///////////////
@@ -154,32 +150,18 @@ pub fn generate_stylesheet_img_block_unified(style: &Style) -> CssBlock {
 //   linking   //
 /////////////////
 
-pub fn create_link(source: &Path, destination: &Path) -> anyhow::Result<()> {
+pub fn create_link(source: &Utf8Path, destination: &Utf8Path) -> anyhow::Result<()> {
     // Unix-based systems use symlinks. Windows has permission issues with them, so uses hardlinks instead.
     #[cfg(windows)]
-    std::fs::hard_link(destination, source).with_context(|| {
-        format!(
-            "Failed to link {} to {}.",
-            source.display(),
-            destination.display()
-        )
-    })?;
+    std::fs::hard_link(destination, source)
+        .with_context(|| format!("Failed to link {source} to {destination}."))?;
 
     #[cfg(unix)]
-    std::os::unix::fs::symlink(destination, source).with_context(|| {
-        format!(
-            "Failed to link {} to {}.",
-            source.display(),
-            destination.display()
-        )
-    })?;
+    std::os::unix::fs::symlink(destination, source)
+        .with_context(|| format!("Failed to link {source} to {destination}."))?;
 
     #[cfg(not(any(windows, unix)))]
-    anyhow::anyhow!(
-        "Unable to link {} to {}: unsupported OS.",
-        source.display(),
-        destination.display()
-    );
+    anyhow::anyhow!("Unable to link {source} to {destination}: unsupported OS.");
 
     Ok(())
 }

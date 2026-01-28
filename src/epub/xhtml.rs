@@ -1,14 +1,15 @@
-use std::{fs::read, io::Cursor, ops::IndexMut, path::Path, str::FromStr};
+use std::{fs::read, io::Cursor, ops::IndexMut, str::FromStr};
 
 use anyhow::Context;
-use pathdiff::diff_paths;
+use camino::Utf8Path;
+use pathdiff::diff_utf8_paths;
 use url::Url;
 use xml::{EmitterConfig, reader::XmlEvent};
 
 use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, navigation::create_navigation_wrapper},
-    helpers::{consts::XHTML_ENTITIES, unwrap_path_utf8, wrap_xml_element_write},
+    helpers::{consts::XHTML_ENTITIES, wrap_xml_element_write},
     style::Style,
 };
 
@@ -118,14 +119,14 @@ pub fn generate_stylesheets(style: &Style) -> (Option<String>, Option<String>) {
 }
 
 fn adjust_xhtml_source(
-    source_path: &Path,
-    destination_path: &Path,
-    no_override_stylesheet_path: Option<&Path>,
-    override_stylesheet_path: Option<&Path>,
+    source_path: &Utf8Path,
+    destination_path: &Utf8Path,
+    no_override_stylesheet_path: Option<&Utf8Path>,
+    override_stylesheet_path: Option<&Utf8Path>,
     style: &Style,
 ) -> anyhow::Result<Vec<u8>> {
     let source_file =
-        read(source_path).with_context(|| format!("Failed to read {}.", source_path.display()))?;
+        read(source_path).with_context(|| format!("Failed to read {source_path}."))?;
     let reader = xml::ParserConfig::new()
         .add_entities(XHTML_ENTITIES)
         .ignore_comments(false)
@@ -229,12 +230,10 @@ fn adjust_xhtml_source(
                     "Unreachable: no-override stylesheet path is Some but can't be unwrapped.",
                 )?;
                 let stylesheet_path_relative =
-                    diff_paths(stylesheet_path_absolute, destination_path_parent).with_context(
+                    diff_utf8_paths(stylesheet_path_absolute, destination_path_parent).with_context(
                         || {
                             format!(
-                                "Internal error: failed to generate path from {} to {}.",
-                                destination_path_parent.display(),
-                                stylesheet_path_absolute.display()
+                                "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
                             )
                         },
                     )?;
@@ -254,7 +253,7 @@ fn adjust_xhtml_source(
                     &mut adjusted_source_buffer_writer,
                     xml::writer::events::XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
-                        .attr("href", unwrap_path_utf8(&stylesheet_path_relative)?),
+                        .attr("href", stylesheet_path_relative.as_str()),
                     |_writer| Ok(()),
                 )?;
             }
@@ -271,12 +270,10 @@ fn adjust_xhtml_source(
                     "Unreachable: override stylesheet path is Some but can't be unwrapped.",
                 )?;
                 let stylesheet_path_relative =
-                    diff_paths(stylesheet_path_absolute, destination_path_parent).with_context(
+                    diff_utf8_paths(stylesheet_path_absolute, destination_path_parent).with_context(
                         || {
                             format!(
-                                "Internal error: failed to generate path from {} to {}.",
-                                destination_path_parent.display(),
-                                stylesheet_path_absolute.display()
+                                "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
                             )
                         },
                     )?;
@@ -285,7 +282,7 @@ fn adjust_xhtml_source(
                     &mut adjusted_source_buffer_writer,
                     xml::writer::events::XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
-                        .attr("href", unwrap_path_utf8(&stylesheet_path_relative)?),
+                        .attr("href", stylesheet_path_relative.as_str()),
                     |_writer| Ok(()),
                 )?;
                 let reader_event_rebuilt = XmlEvent::EndElement { name };
@@ -313,11 +310,11 @@ fn adjust_xhtml_source(
 #[allow(clippy::too_many_arguments)]
 pub fn adjust_spine_xhtml(
     epub_info: &EpubInfo,
-    contents_dir_path: &Path,
-    source_path: &Path,
-    destination_path: &Path,
-    no_override_stylesheet_path: Option<&Path>,
-    override_stylesheet_path: Option<&Path>,
+    contents_dir_path: &Utf8Path,
+    source_path: &Utf8Path,
+    destination_path: &Utf8Path,
+    no_override_stylesheet_path: Option<&Utf8Path>,
+    override_stylesheet_path: Option<&Utf8Path>,
     spine_index: usize,
     style: &Style,
 ) -> anyhow::Result<Vec<u8>> {
@@ -333,8 +330,7 @@ pub fn adjust_spine_xhtml(
             let adjusted_source_string =
                 String::from_utf8(adjusted_source?).with_context(|| {
                     format!(
-                        "Internal error: {} wasn't encoded to valid UTF-8 on adjustment.",
-                        source_path.display()
+                        "Internal error: {source_path} wasn't encoded to valid UTF-8 on adjustment."
                     )
                 })?;
             create_navigation_wrapper(

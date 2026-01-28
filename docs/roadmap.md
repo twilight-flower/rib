@@ -37,6 +37,7 @@
 - Add flag to open to a specific spine-section, probably 1-indexed
 - Render nonlinear spine items at reduced opacity in the index, as a visual indicator of their nonlinearity
 - Focus the inside of the section iframe on load, so that scrolling via page-down works without needing the frame clicked into first
+- Make library path configurable, in case people want to store their libraries somewhere other than the default ephemeral data dir or the default ephemeral data dir is non-UTF-8
 
 # Feature Consideration/Research
 
@@ -45,7 +46,6 @@
 	- azw3: no obviously-relevant crate as of search on 2026-01-02; might need to rely on external tools here
 	- cb[z/r/others?]: Might be easy to fit into the reader/navigation framework? But also might be a bad fit better-suited to more specialized local browsers. Plausibly worth experimentation.
 	- pdf: the hard one. Probably don't. But at least consider it. See what pdf.js is capable of, maybe?
-- Maybe make library path configurable, in case people want to store their libraries somewhere other than the default ephemeral data dir?
 - Maybe alternately allow reading config from next to executable, in case the system-specific config-location is broken?
 - Maybe code up some sort of GUIish manager for people who want to do library-management and/or configuration via GUI rather than CLI? Pretty late in the game if so, though.
 - Maybe move TOC to display above the spine-and-TOC pair, in the index, to improve ergonomics for users uninterested in the guts?
@@ -65,3 +65,4 @@
 	- Other?
 - Consider defining the rest of the ProjectDirs fields, not just the application name
 - Reasily-style page-number-display?
+- Factor out `pathdiff` in favor of diffing `file://` URLs?
