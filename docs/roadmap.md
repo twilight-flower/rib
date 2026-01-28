@@ -8,6 +8,7 @@
 - Fix handling of `<br>` tags, which currently are (to browser parsers' eyes) doubled
 	- This is because they're [void elements](https://developer.mozilla.org/en-US/docs/Glossary/Void_element). Probably the answer here is a generalized policy of, when writing void elements, writing them in self-closing form rather than non-self-closing form. Figure out how to make the XML writer vary on that axis.
 - Update back away from `src` and towards a pairing of `srcdoc` plus a compensatory `base` tag, so that CORS doesn't interfere with fragment-following
+	- (Be careful that the `base` doesn't interfere with any `base` preexistingly in the source. Scan head for base before adding one; if one already exists, edit it instead.)
 
 # Potential-bugfix exploration
 
@@ -66,5 +67,4 @@
 	- Other?
 - Consider defining the rest of the ProjectDirs fields, not just the application name
 - Reasily-style page-number-display?
-- Factor out `pathdiff` in favor of diffing `file://` URLs?
 - Traitify XML helpers as with path helpers?

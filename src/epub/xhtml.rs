@@ -2,7 +2,6 @@ use std::{fs::read, io::Cursor, ops::IndexMut, str::FromStr};
 
 use anyhow::Context;
 use camino::Utf8Path;
-use pathdiff::diff_utf8_paths;
 use url::Url;
 use xml::{EmitterConfig, reader::XmlEvent};
 
@@ -155,11 +154,6 @@ pub fn adjust_xhtml_source(
     let contents_dir_url = contents_dir_path.to_dir_url()?;
     let destination_url = destination_path.to_file_url()?;
 
-    let destination_path_parent = destination_path
-        .parent()
-        .context("Internal error: attempted to adjust XHTML with root as its destination path.")?;
-    // Note: we use `destination_path_parent`, not `destination_path`, as base for relative stylesheet-links, because `diff_paths` assumes all its paths are dirs rather than files and so adds an extra `..` component relative to the path-logic that XHTML operates under.
-
     for event in reader {
         match event.context("XML parse failure.")? {
             XmlEvent::StartElement {
@@ -260,17 +254,12 @@ pub fn adjust_xhtml_source(
                 && no_override_stylesheet_path.is_some() =>
             {
                 // Inject no-override styles at start of head if they exist
-                let stylesheet_path_absolute = no_override_stylesheet_path.context(
-                    "Unreachable: no-override stylesheet path is Some but can't be unwrapped.",
-                )?;
-                let stylesheet_path_relative =
-                    diff_utf8_paths(stylesheet_path_absolute, destination_path_parent).with_context(
-                        || {
-                            format!(
-                                "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
-                            )
-                        },
-                    )?;
+                let stylesheet_url_absolute = no_override_stylesheet_path
+                    .context(
+                        "Unreachable: no-override stylesheet path is Some but can't be unwrapped.",
+                    )?
+                    .to_file_url()?;
+                let stylesheet_url_relative = destination_url.make_relative(&stylesheet_url_absolute).with_context(|| format!("Internal error: failed to get relative URL from {destination_url} to {stylesheet_url_absolute}."))?;
 
                 let reader_event_rebuilt = XmlEvent::StartElement {
                     name,
@@ -287,7 +276,7 @@ pub fn adjust_xhtml_source(
                     &mut adjusted_source_buffer_writer,
                     xml::writer::events::XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
-                        .attr("href", stylesheet_path_relative.as_str()),
+                        .attr("href", &stylesheet_url_relative),
                     |_writer| Ok(()),
                 )?;
             }
@@ -300,23 +289,18 @@ pub fn adjust_xhtml_source(
                     && override_stylesheet_path.is_some() =>
             {
                 // Inject override styles at end of head if they exist
-                let stylesheet_path_absolute = override_stylesheet_path.context(
-                    "Unreachable: override stylesheet path is Some but can't be unwrapped.",
-                )?;
-                let stylesheet_path_relative =
-                    diff_utf8_paths(stylesheet_path_absolute, destination_path_parent).with_context(
-                        || {
-                            format!(
-                                "Internal error: failed to generate path from {destination_path_parent} to {stylesheet_path_absolute}."
-                            )
-                        },
-                    )?;
+                let stylesheet_url_absolute = override_stylesheet_path
+                    .context(
+                        "Unreachable: override stylesheet path is Some but can't be unwrapped.",
+                    )?
+                    .to_file_url()?;
+                let stylesheet_url_relative = destination_url.make_relative(&stylesheet_url_absolute).with_context(|| format!("Internal error: failed to get relative URL from {destination_url} to {stylesheet_url_absolute}."))?;
 
                 wrap_xml_element_write(
                     &mut adjusted_source_buffer_writer,
                     xml::writer::events::XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
-                        .attr("href", stylesheet_path_relative.as_str()),
+                        .attr("href", stylesheet_url_relative.as_str()),
                     |_writer| Ok(()),
                 )?;
                 let reader_event_rebuilt = XmlEvent::EndElement { name };

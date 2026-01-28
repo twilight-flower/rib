@@ -32,7 +32,6 @@ xml = "1.2.0"
 camino = { version = "1.2.2", features = ["serde1"] }
 directories = "6.0.0"
 path-clean = "1.0.1"
-pathdiff = { version = "0.2.3", features = ["camino"] }
 
 # Error handling
 anyhow = "1.0.100"
