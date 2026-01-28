@@ -6,8 +6,8 @@ use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, SpineNavigationMap},
     helpers::{
-        generate_stylesheet_img_block_unified, generate_stylesheet_link_block_unified,
-        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        RibXmlWriterHelpers, generate_stylesheet_img_block_unified,
+        generate_stylesheet_link_block_unified,
     },
     style::Style,
 };
@@ -67,25 +67,22 @@ pub fn create_navigation_wrapper(
         .position(|item| item.path == epub_info.last_linear_spine_item_path)
         .context("Ill-formed EPUB: no linear spine items.")?;
 
-    write_xhtml_declaration(&mut navigation_wrapper_buffer_writer)?;
-    wrap_xml_element_write(
-        &mut navigation_wrapper_buffer_writer,
+    navigation_wrapper_buffer_writer.write_xhtml_declaration()?;
+    navigation_wrapper_buffer_writer.wrap_xml_element_write(
         XmlEvent::start_element("html")
             .default_ns("http://www.w3.org/1999/xhtml")
             .attr("lang", "en"),
         |writer| {
-            wrap_xml_element_write(writer, XmlEvent::start_element("head"), |writer| {
-                wrap_xml_element_write(
-                    writer,
+            writer.wrap_xml_element_write(XmlEvent::start_element("head"), |writer| {
+                writer.wrap_xml_element_write(
                     XmlEvent::start_element("meta").attr("charset", "utf-8"),
                     |_writer| Ok(()),
                 )?;
-                wrap_xml_element_write(writer, XmlEvent::start_element("title"), |writer| {
+                writer.wrap_xml_element_write(XmlEvent::start_element("title"), |writer| {
                     // Maybe add section name here where the index has " | Index", if I can think of a good way to generate those?
-                    write_xml_characters(writer, &format!("rib | {}", epub_info.title))
+                    writer.write_xml_characters(&format!("rib | {}", epub_info.title))
                 })?;
-                wrap_xml_element_write(
-                    writer,
+                writer.wrap_xml_element_write(
                     XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
                         .attr("href", "navigation_styles.css"),
@@ -93,25 +90,22 @@ pub fn create_navigation_wrapper(
                 )?;
                 Ok(())
             })?;
-            wrap_xml_element_write(writer, XmlEvent::start_element("body"), |writer| {
-                wrap_xml_element_write(
+            writer.wrap_xml_element_write(XmlEvent::start_element("body"), |writer| {
+                writer.wrap_xml_element_write(
                     // It'd be nice to do sandboxing here to block scripts until I've considered whether I want to allow them, but hard to configure in a way that doesn't break things. So leave it out for now.
-                    writer,
                     XmlEvent::start_element("iframe")
                         .attr("id", "section")
                         .attr("src", section_path.as_str()),
                     |_writer| Ok(()),
                 )?;
-                wrap_xml_element_write(
-                    writer,
+                writer.wrap_xml_element_write(
                     XmlEvent::start_element("nav").attr("id", "navigation"),
                     |writer| {
                         // Currently there's no dropdown navigation menu, just an index button. Consider changing this later.
                         match spine_index <= first_linear_section_index {
-                            true => wrap_xml_element_write(
-                                writer,
+                            true => writer.wrap_xml_element_write(
                                 XmlEvent::start_element("a").attr("class", "navigation-button"),
-                                |writer| write_xml_characters(writer, "Previous"),
+                                |writer| writer.write_xml_characters("Previous"),
                             ),
                             false => {
                                 let previous_linear_spine_item_path =
@@ -119,51 +113,46 @@ pub fn create_navigation_wrapper(
                                         spine_navigation_maps,
                                         spine_index,
                                     )?;
-                                wrap_xml_element_write(
-                                    writer,
+                                writer.wrap_xml_element_write(
                                     XmlEvent::start_element("a")
                                         .attr("class", "navigation-button")
                                         .attr("href", previous_linear_spine_item_path),
-                                    |writer| write_xml_characters(writer, "Previous"),
+                                    |writer| writer.write_xml_characters("Previous"),
                                 )
                             }
                         }?;
                         if style.include_index {
-                            wrap_xml_element_write(
-                                writer,
+                            writer.wrap_xml_element_write(
                                 XmlEvent::start_element("a")
                                     .attr("class", "navigation-button")
                                     .attr("href", "index.xhtml"),
-                                |writer| write_xml_characters(writer, "Index"),
+                                |writer| writer.write_xml_characters("Index"),
                             )?;
                         }
                         match spine_index >= last_linear_section_index {
-                            true => wrap_xml_element_write(
-                                writer,
+                            true => writer.wrap_xml_element_write(
                                 XmlEvent::start_element("button")
                                     .attr("type", "button")
                                     .attr("disabled", "disabled"),
-                                |writer| write_xml_characters(writer, "Next"),
+                                |writer| writer.write_xml_characters("Next"),
                             ),
                             false => {
                                 let next_linear_spine_item_path = get_next_linear_spine_item_path(
                                     spine_navigation_maps,
                                     spine_index,
                                 )?;
-                                wrap_xml_element_write(
-                                    writer,
+                                writer.wrap_xml_element_write(
                                     XmlEvent::start_element("a")
                                         .attr("class", "navigation-button")
                                         .attr("href", next_linear_spine_item_path),
-                                    |writer| write_xml_characters(writer, "Next"),
+                                    |writer| writer.write_xml_characters("Next"),
                                 )
                             }
                         }?;
                         Ok(())
                     },
                 )?;
-                wrap_xml_element_write(
-                    writer,
+                writer.wrap_xml_element_write(
                     XmlEvent::start_element("script").attr("src", "navigation_script.js"),
                     |_writer| Ok(()),
                 )?;

@@ -14,6 +14,7 @@
 
 - Ensure UTF-16-encoded XHTML/SVG gets reencoded to UTF-8 and has all metadata specifying it as UTF-16 also updated to specify it as UTF-8 instead. `<meta>` elements in the head, and such.
 - Any way to work on Linux if `xdg-open` isn't installed, or to detect its non-installation and print a warning, or to legibly depend on it, or such?
+- Figure out more robust Mac OS default-browser-detection; `open` is apparently unreliable
 
 # Release
 

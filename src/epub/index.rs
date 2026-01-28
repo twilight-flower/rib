@@ -8,8 +8,8 @@ use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::{EpubInfo, EpubSpineItem, EpubTocItem},
     helpers::{
-        generate_stylesheet_img_block_unified, generate_stylesheet_link_block_unified,
-        wrap_xml_element_write, write_xhtml_declaration, write_xml_characters,
+        RibXmlWriterHelpers, generate_stylesheet_img_block_unified,
+        generate_stylesheet_link_block_unified,
     },
     style::Style,
 };
@@ -96,7 +96,7 @@ impl<'a> EpubIndex<'a> {
         while let Some(next_toc_item) = spine_associated_toc_items_iter.peek() {
             match current_ul_nesting_level.cmp(&next_toc_item.nesting_level) {
                 Ordering::Less => {
-                    wrap_xml_element_write(writer, XmlEvent::start_element("ul"), |writer| {
+                    writer.wrap_xml_element_write(XmlEvent::start_element("ul"), |writer| {
                         Self::list_toc_items_for_linear_index_spine_entry_recursive(
                             writer,
                             spine_associated_toc_items_iter,
@@ -109,16 +109,15 @@ impl<'a> EpubIndex<'a> {
                     let toc_item = spine_associated_toc_items_iter.next().context(
                         "Unreachable: no next item on peekable iter which peeked to Some.",
                     )?;
-                    wrap_xml_element_write(writer, XmlEvent::start_element("li"), |writer| {
-                        wrap_xml_element_write(
-                            writer,
+                    writer.wrap_xml_element_write(XmlEvent::start_element("li"), |writer| {
+                        writer.wrap_xml_element_write(
                             XmlEvent::start_element("a").attr(
                                 "href",
                                 rendition_contents_dir
                                     .join(&toc_item.path_with_fragment)
                                     .as_str(),
                             ),
-                            |writer| write_xml_characters(writer, &toc_item.label),
+                            |writer| writer.write_xml_characters(&toc_item.label),
                         )
                     })?;
                 }
@@ -147,20 +146,19 @@ impl<'a> EpubIndex<'a> {
         rendition_contents_dir: &Utf8Path,
     ) -> anyhow::Result<()> {
         for toc_item in toc {
-            wrap_xml_element_write(writer, XmlEvent::start_element("li"), |writer| {
-                wrap_xml_element_write(
-                    writer,
+            writer.wrap_xml_element_write(XmlEvent::start_element("li"), |writer| {
+                writer.wrap_xml_element_write(
                     XmlEvent::start_element("a").attr(
                         "href",
                         rendition_contents_dir
                             .join(&toc_item.path_with_fragment)
                             .as_str(),
                     ),
-                    |writer| write_xml_characters(writer, &toc_item.label),
+                    |writer| writer.write_xml_characters(&toc_item.label),
                 )
             })?;
             if !toc_item.children.is_empty() {
-                wrap_xml_element_write(writer, XmlEvent::start_element("ul"), |writer| {
+                writer.wrap_xml_element_write(XmlEvent::start_element("ul"), |writer| {
                     Self::list_toc_items_for_nonlinear_index(
                         writer,
                         &toc_item.children.iter().collect(),
@@ -184,24 +182,21 @@ impl<'a> EpubIndex<'a> {
             .pad_self_closing(false)
             .create_writer(xhtml_buffer);
 
-        write_xhtml_declaration(&mut writer)?;
-        wrap_xml_element_write(
-            &mut writer,
+        writer.write_xhtml_declaration()?;
+        writer.wrap_xml_element_write(
             XmlEvent::start_element("html")
                 .default_ns("http://www.w3.org/1999/xhtml")
                 .attr("lang", "en"),
             |writer| {
-                wrap_xml_element_write(writer, XmlEvent::start_element("head"), |writer| {
-                    wrap_xml_element_write(
-                        writer,
+                writer.wrap_xml_element_write(XmlEvent::start_element("head"), |writer| {
+                    writer.wrap_xml_element_write(
                         XmlEvent::start_element("meta").attr("charset", "utf-8"),
                         |_writer| Ok(()),
                     )?;
-                    wrap_xml_element_write(writer, XmlEvent::start_element("title"), |writer| {
-                        write_xml_characters(writer, &format!("rib | {} | Index", epub_info.title))
+                    writer.wrap_xml_element_write(XmlEvent::start_element("title"), |writer| {
+                        writer.write_xml_characters(&format!("rib | {} | Index", epub_info.title))
                     })?;
-                    wrap_xml_element_write(
-                        writer,
+                    writer.wrap_xml_element_write(
                         XmlEvent::start_element("link")
                             .attr("rel", "stylesheet")
                             .attr("href", "index_styles.css"),
@@ -209,19 +204,18 @@ impl<'a> EpubIndex<'a> {
                     )?;
                     Ok(())
                 })?;
-                wrap_xml_element_write(writer, XmlEvent::start_element("body"), |writer| {
-                    wrap_xml_element_write(writer, XmlEvent::start_element("h1"), |writer| {
-                        write_xml_characters(writer, &epub_info.title)
+                writer.wrap_xml_element_write(XmlEvent::start_element("body"), |writer| {
+                    writer.wrap_xml_element_write(XmlEvent::start_element("h1"), |writer| {
+                        writer.write_xml_characters(&epub_info.title)
                     })?;
                     if !epub_info.creators.is_empty() {
-                        wrap_xml_element_write(writer, XmlEvent::start_element("h3"), |writer| {
+                        writer.wrap_xml_element_write(XmlEvent::start_element("h3"), |writer| {
                             // Fancify join logic later maybe?
-                            write_xml_characters(writer, &epub_info.creators.join(" & "))
+                            writer.write_xml_characters(&epub_info.creators.join(" & "))
                         })?;
                     }
                     if let Some(cover_path) = &epub_info.cover_path {
-                        wrap_xml_element_write(
-                            writer,
+                        writer.wrap_xml_element_write(
                             XmlEvent::start_element("img")
                                 .attr("alt", "book cover image")
                                 .attr(
@@ -233,72 +227,63 @@ impl<'a> EpubIndex<'a> {
                             |_writer| Ok(()),
                         )?;
                     }
-                    wrap_xml_element_write(writer, XmlEvent::start_element("p"), |writer| {
-                        wrap_xml_element_write(
-                            writer,
+                    writer.wrap_xml_element_write(XmlEvent::start_element("p"), |writer| {
+                        writer.wrap_xml_element_write(
                             XmlEvent::start_element("a").attr(
                                 "href",
                                 rendition_contents_dir_relative_path
                                     .join(&epub_info.first_linear_spine_item_path)
                                     .as_str(),
                             ),
-                            |writer| write_xml_characters(writer, "Start"),
+                            |writer| writer.write_xml_characters("Start"),
                         )
                     })?;
                     // Bodymatter link in similar style to start and end links, if there's a good way to get it within the limits of this epub crate
-                    wrap_xml_element_write(writer, XmlEvent::start_element("p"), |writer| {
-                        wrap_xml_element_write(
-                            writer,
+                    writer.wrap_xml_element_write(XmlEvent::start_element("p"), |writer| {
+                        writer.wrap_xml_element_write(
                             XmlEvent::start_element("a").attr(
                                 "href",
                                 rendition_contents_dir_relative_path
                                     .join(&epub_info.last_linear_spine_item_path)
                                     .as_str(),
                             ),
-                            |writer| write_xml_characters(writer, "End"),
+                            |writer| writer.write_xml_characters("End"),
                         )
                     })?;
-                    wrap_xml_element_write(writer, XmlEvent::start_element("table"), |writer| {
+                    writer.wrap_xml_element_write(XmlEvent::start_element("table"), |writer| {
                         match self {
                             Self::TocLinearRelativeToSpine(mapping_vec) => {
-                                wrap_xml_element_write(
-                                    writer,
+                                writer.wrap_xml_element_write(
                                     XmlEvent::start_element("tr"),
                                     |writer| {
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
-                                            |writer| write_xml_characters(writer, "Spine"),
+                                            |writer| writer.write_xml_characters("Spine"),
                                         )?;
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
                                             |writer| {
-                                                write_xml_characters(writer, "Table of Contents")
+                                                writer.write_xml_characters("Table of Contents")
                                             },
                                         )?;
                                         Ok(())
                                     },
                                 )?;
                                 for (spine_item, toc_items) in mapping_vec {
-                                    wrap_xml_element_write(
-                                        writer,
+                                    writer.wrap_xml_element_write(
                                         XmlEvent::start_element("tr"),
                                         |writer| {
-                                            wrap_xml_element_write(
-                                                writer,
+                                            writer.wrap_xml_element_write(
                                                 XmlEvent::start_element("td"),
                                                 |writer| {
-                                                    wrap_xml_element_write(
-                                                        writer,
+                                                    writer.wrap_xml_element_write(
                                                         XmlEvent::start_element("ul"),
                                                         |writer| {
-                                                            wrap_xml_element_write(
-                                                                writer,
+                                                            writer.wrap_xml_element_write(
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
-                                                                    wrap_xml_element_write(writer, XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
-                                                                        write_xml_characters(writer, spine_item.path.as_str())
+                                                                    writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
+                                                                        writer.write_xml_characters(spine_item.path.as_str())
                                                                     })
                                                                 },
                                                             )
@@ -306,17 +291,14 @@ impl<'a> EpubIndex<'a> {
                                                     )
                                                 },
                                             )?;
-                                            wrap_xml_element_write(
-                                                writer,
+                                            writer.wrap_xml_element_write(
                                                 XmlEvent::start_element("td"),
                                                 |writer| match toc_items.is_empty() {
-                                                    true => wrap_xml_element_write(
-                                                        writer,
+                                                    true => writer.wrap_xml_element_write(
                                                         XmlEvent::start_element("br"),
                                                         |_writer| Ok(()),
                                                     ),
-                                                    false => wrap_xml_element_write(
-                                                        writer,
+                                                    false => writer.wrap_xml_element_write(
                                                         XmlEvent::start_element("ul"),
                                                         |writer| {
                                                             Self::list_toc_items_for_linear_index_spine_entry(writer, toc_items, &rendition_contents_dir_relative_path)
@@ -330,56 +312,46 @@ impl<'a> EpubIndex<'a> {
                                 }
                             }
                             Self::TocNonlinearRelativeToSpine(spine, toc) => {
-                                wrap_xml_element_write(
-                                    writer,
+                                writer.wrap_xml_element_write(
                                     XmlEvent::start_element("tr"),
                                     |writer| {
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
-                                            |writer| write_xml_characters(writer, "Spine"),
+                                            |writer| writer.write_xml_characters("Spine"),
                                         )?;
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
                                             |writer| {
-                                                wrap_xml_element_write(
-                                                    writer,
+                                                writer.wrap_xml_element_write(
                                                     XmlEvent::start_element("br"),
                                                     |_writer| Ok(()),
                                                 )
                                             },
                                         )?;
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
                                             |writer| {
-                                                write_xml_characters(writer, "Table of Contents")
+                                                writer.write_xml_characters("Table of Contents")
                                             },
                                         )?;
                                         Ok(())
                                     },
                                 )?;
-                                wrap_xml_element_write(
-                                    writer,
+                                writer.wrap_xml_element_write(
                                     XmlEvent::start_element("tr"),
                                     |writer| {
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
                                             |writer| {
-                                                wrap_xml_element_write(
-                                                    writer,
+                                                writer.wrap_xml_element_write(
                                                     XmlEvent::start_element("ul"),
                                                     |writer| {
                                                         for spine_item in spine {
-                                                            // Maybe do something to mark nonlinear spine-entries differently? (Previously they weren't rendered at all; this seemed suboptimal for usability.)
-                                                            wrap_xml_element_write(
-                                                                writer,
+                                                            writer.wrap_xml_element_write(
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
-                                                                    wrap_xml_element_write(writer, XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
-                                                                        write_xml_characters(writer, spine_item.path.as_str())
+                                                                    writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
+                                                                        writer.write_xml_characters(spine_item.path.as_str())
                                                                     })
                                                                 },
                                                             )?;
@@ -389,23 +361,19 @@ impl<'a> EpubIndex<'a> {
                                                 )
                                             },
                                         )?;
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
                                             |writer| {
-                                                wrap_xml_element_write(
-                                                    writer,
+                                                writer.wrap_xml_element_write(
                                                     XmlEvent::start_element("br"),
                                                     |_writer| Ok(()),
                                                 )
                                             },
                                         )?;
-                                        wrap_xml_element_write(
-                                            writer,
+                                        writer.wrap_xml_element_write(
                                             XmlEvent::start_element("td"),
                                             |writer| {
-                                                wrap_xml_element_write(
-                                                    writer,
+                                                writer.wrap_xml_element_write(
                                                     XmlEvent::start_element("ul"),
                                                     |writer| {
                                                         Self::list_toc_items_for_nonlinear_index(

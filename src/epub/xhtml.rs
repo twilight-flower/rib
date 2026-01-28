@@ -8,7 +8,7 @@ use xml::{EmitterConfig, reader::XmlEvent};
 use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
     epub::SpineNavigationMap,
-    helpers::{RibPathHelpers, RibUrlHelpers, consts::XHTML_ENTITIES, wrap_xml_element_write},
+    helpers::{RibPathHelpers, RibUrlHelpers, RibXmlWriterHelpers, consts::XHTML_ENTITIES},
     style::Style,
 };
 
@@ -272,8 +272,7 @@ pub fn adjust_xhtml_source(
                 adjusted_source_buffer_writer
                     .write(writer_event)
                     .context("Failed to write <head> element XML to new buffer.")?;
-                wrap_xml_element_write(
-                    &mut adjusted_source_buffer_writer,
+                adjusted_source_buffer_writer.wrap_xml_element_write(
                     xml::writer::events::XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
                         .attr("href", &stylesheet_url_relative),
@@ -296,8 +295,7 @@ pub fn adjust_xhtml_source(
                     .to_file_url()?;
                 let stylesheet_url_relative = destination_url.make_relative(&stylesheet_url_absolute).with_context(|| format!("Internal error: failed to get relative URL from {destination_url} to {stylesheet_url_absolute}."))?;
 
-                wrap_xml_element_write(
-                    &mut adjusted_source_buffer_writer,
+                adjusted_source_buffer_writer.wrap_xml_element_write(
                     xml::writer::events::XmlEvent::start_element("link")
                         .attr("rel", "stylesheet")
                         .attr("href", stylesheet_url_relative.as_str()),

@@ -5,9 +5,11 @@
 
 Read EPUBs in your web browser!
 
-A lightweight desktop EPUB reader. Name is short for '**R**ead **i**n **b**rowser'. Currently in early development.
+A lightweight desktop EPUB reader. Its name is short for '**R**ead **i**n **b**rowser'. 
 
-Tested on Windows and Linux; currently untested on Mac, but theoretically should work there as well.
+Rib is in early development, and not yet fully functional. (But *does* already work on *many* EPUBs, at least.)
+
+Tested on Windows and Linux; currently only very limitedly tested on Mac.
 
 ## Usage
 
