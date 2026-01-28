@@ -31,7 +31,6 @@ xml = "1.2.0"
 # Paths
 camino = { version = "1.2.2", features = ["serde1"] }
 directories = "6.0.0"
-path-clean = "1.0.1"
 
 # Error handling
 anyhow = "1.0.100"

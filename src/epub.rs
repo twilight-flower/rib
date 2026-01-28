@@ -12,12 +12,11 @@ use std::{
 use anyhow::{Context, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use epub::doc::EpubDoc;
-use path_clean::PathClean;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     browser,
-    helpers::{RibPathHelpers, get_dir_size},
+    helpers::{RibPathHelpers, RibUrlHelpers, get_dir_size},
     library::Library,
     style::Style,
 };
@@ -53,31 +52,34 @@ pub struct EpubTocItem {
 
 impl EpubTocItem {
     fn from_epub_library_representation(
+        library_path: &Utf8Path,
         source: epub::doc::NavPoint,
         nesting_level: u64,
     ) -> anyhow::Result<Self> {
-        let path = Utf8PathBuf::try_from(source.content.clean())
-            .context("Ill-formed EPUB: non-UTF-8 path encountered.")?
-            .standardize_separators();
-        let mut path_split = path.as_str().split('#').collect::<Vec<_>>();
-        let path_without_fragment = match path_split.len() {
-            0 => Utf8PathBuf::new(), // This should be possible per the EPUB spec, even if the library is failing to expose it well.
-            1 => Utf8PathBuf::from(
-                path_split
-                    .first()
-                    .context("Unreachable: no first entry in vec of length 1.")?,
-            ),
-            _ => {
-                let _fragment = path_split
-                    .pop()
-                    .context("Unreachable: no last entry in vec of length >1.")?;
-                Utf8PathBuf::from(path_split.join("#"))
-            }
-        };
+        // Library path is never used in its capacity as the path of the library specifically. But it's a predictably-valid path that can be used as a URL base for subsequent manipulations, where the URL parser has enough cross-platform variation that one can't trivially just use e.g. "/" as a safe base path.
+        let root_url = library_path.to_dir_url()?;
+        let path_str = source
+            .content
+            .to_str()
+            .context("Ill-formed EPUB: non-UTF-8 path encountered.")?;
+        let path_url = root_url.join(path_str).with_context(|| {
+            format!("Ill-formed EPUB: TOC contains path {path_str} which extends above EPUB root.")
+        })?;
+        let path_url_without_fragment = path_url.without_suffixes();
+        let path_string_with_fragment = root_url
+            .make_relative(&path_url)
+            .context("Internal error: failed to make joined path relative again.")?;
+        let path_string_without_fragment = root_url
+            .make_relative(&path_url_without_fragment)
+            .context("Internal error: failed to make joined path relative again.")?;
+        let path_with_fragment = Utf8Path::new(&path_string_with_fragment).standardize_separators();
+        let path_without_fragment =
+            Utf8Path::new(&path_string_without_fragment).standardize_separators();
 
         let mut children = Vec::new();
         for source_child in source.children {
             children.push(Self::from_epub_library_representation(
+                library_path,
                 source_child,
                 nesting_level + 1,
             )?);
@@ -86,7 +88,7 @@ impl EpubTocItem {
         Ok(Self {
             label: source.label,
             path_without_fragment,
-            path_with_fragment: path,
+            path_with_fragment,
             children,
             nesting_level,
         })
@@ -255,10 +257,12 @@ impl EpubInfo {
 
     fn get_epub_table_of_contents(
         epub: &mut EpubDoc<BufReader<File>>,
+        library_path: &Utf8Path,
     ) -> anyhow::Result<Vec<EpubTocItem>> {
         let mut toc = Vec::new();
         for navpoint in &epub.toc {
             toc.push(EpubTocItem::from_epub_library_representation(
+                library_path,
                 navpoint.clone(),
                 0,
             )?);
@@ -283,7 +287,7 @@ impl EpubInfo {
 
         let spine_items = Self::get_epub_spine_items(epub)?;
         let nonspine_resource_paths = Self::get_epub_nonspine_resource_paths(epub, &spine_items)?;
-        let table_of_contents = Self::get_epub_table_of_contents(epub)?;
+        let table_of_contents = Self::get_epub_table_of_contents(epub, &library.library_path)?;
 
         let first_linear_spine_item_path = spine_items
             .iter()

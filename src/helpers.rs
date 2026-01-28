@@ -71,7 +71,7 @@ impl RibPathHelpers for Utf8Path {
     fn to_dir_url(&self) -> anyhow::Result<Url> {
         match Url::from_directory_path(self) {
             Ok(url) => Ok(url),
-            Err(()) => bail!("Internal error: couldn't convert path {self} to file URL."),
+            Err(()) => bail!("Internal error: couldn't convert path {self} to dir URL."),
         }
     }
 }
