@@ -158,11 +158,16 @@ impl Library {
         index_path_from_library_root: &Utf8Path,
         rendition_dir_path: &Utf8Path,
         rendition_contents_dir_path_from_rendition_dir: Utf8PathBuf,
+        spine_navigation_maps: &[SpineNavigationMap],
     ) -> anyhow::Result<()> {
         let index =
             EpubIndex::from_spine_and_toc(&epub_info.spine_items, &epub_info.table_of_contents)?;
-        let index_xhtml =
-            index.to_xhtml(epub_info, rendition_contents_dir_path_from_rendition_dir)?;
+        let index_xhtml = index.to_xhtml(
+            epub_info,
+            style,
+            rendition_contents_dir_path_from_rendition_dir,
+            spine_navigation_maps,
+        )?;
         let index_path = library_path.join(index_path_from_library_root);
         write(&index_path, &index_xhtml)
             .with_context(|| format!("Failed to write rendition index to {index_path}."))?;
@@ -311,12 +316,12 @@ impl Library {
         style: &Style,
         rendition_dir_path: &Utf8Path,
         raw_rendition_path: &Utf8Path,
+        spine_navigation_maps: &[SpineNavigationMap],
     ) -> anyhow::Result<()> {
         let contents_dir_path = rendition_dir_path.join("contents");
 
         let (no_override_stylesheet_path, override_stylesheet_path) =
             Self::write_rendition_contents_stylesheets(style, rendition_dir_path)?;
-        let spine_navigation_maps = epub_info.get_spine_navigation_maps();
 
         Self::link_rendition_contents_nonspine_resources(
             epub_info,
@@ -330,11 +335,11 @@ impl Library {
             raw_rendition_path,
             &no_override_stylesheet_path,
             &override_stylesheet_path,
-            &spine_navigation_maps,
+            spine_navigation_maps,
         )?;
 
         if style.inject_navigation {
-            Self::write_navigation(epub_info, style, rendition_dir_path, &spine_navigation_maps)?;
+            Self::write_navigation(epub_info, style, rendition_dir_path, spine_navigation_maps)?;
         }
 
         Ok(())
@@ -357,6 +362,8 @@ impl Library {
                 create_dir_all(&rendition_dir_path)
                     .context("Couldn't create rendition directory for new style.")?;
 
+                let spine_navigation_maps = epub_info.get_spine_navigation_maps();
+
                 let default_file_path_from_library_root =
                     match (style.include_index, style.uses_raw_contents_dir()) {
                         (true, true) => {
@@ -369,6 +376,7 @@ impl Library {
                                 &index_path_from_library_root,
                                 &rendition_dir_path,
                                 ["..", "raw"].iter().collect(),
+                                &spine_navigation_maps,
                             )?;
                             index_path_from_library_root
                         }
@@ -382,6 +390,7 @@ impl Library {
                                 &index_path_from_library_root,
                                 &rendition_dir_path,
                                 "contents".into(),
+                                &spine_navigation_maps,
                             )?;
                             Self::generate_rendition_contents_dir(
                                 epub_info,
@@ -390,6 +399,7 @@ impl Library {
                                 &self
                                     .library_path
                                     .join(&epub_info.raw_rendition.dir_path_from_library_root),
+                                &spine_navigation_maps,
                             )?;
                             index_path_from_library_root
                         }
@@ -405,6 +415,7 @@ impl Library {
                                 &self
                                     .library_path
                                     .join(&epub_info.raw_rendition.dir_path_from_library_root),
+                                &spine_navigation_maps,
                             )?;
                             rendition_dir_path_from_library_root
                                 .join("contents")

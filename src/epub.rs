@@ -21,13 +21,13 @@ use crate::{
     style::Style,
 };
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum EpubSpineItemFormat {
     Svg,
     Xhtml,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct EpubSpineItem {
     pub path: Utf8PathBuf,
     pub format: EpubSpineItemFormat,
@@ -46,6 +46,7 @@ pub struct EpubTocItem {
     label: String,
     path_without_fragment: Utf8PathBuf,
     path_with_fragment: Utf8PathBuf,
+    fragment: Option<String>,
     children: Vec<EpubTocItem>,
     nesting_level: u64,
 }
@@ -74,6 +75,9 @@ impl EpubTocItem {
         let path_with_fragment = Utf8Path::new(&path_string_with_fragment).standardize_separators();
         let path_without_fragment =
             Utf8Path::new(&path_string_without_fragment).standardize_separators();
+        let fragment = path_string_with_fragment
+            .strip_prefix(&path_string_without_fragment)
+            .map(|prefix| prefix.to_string());
 
         let mut children = Vec::new();
         for source_child in source.children {
@@ -88,6 +92,7 @@ impl EpubTocItem {
             label: source.label,
             path_without_fragment,
             path_with_fragment,
+            fragment,
             children,
             nesting_level,
         })

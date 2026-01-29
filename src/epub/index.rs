@@ -6,7 +6,7 @@ use xml::{EventWriter, writer::XmlEvent};
 
 use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
-    epub::{EpubInfo, EpubSpineItem, EpubTocItem},
+    epub::{EpubInfo, EpubSpineItem, EpubTocItem, SpineNavigationMap},
     helpers::{
         RibXmlWriterHelpers, generate_stylesheet_img_block_unified,
         generate_stylesheet_link_block_unified,
@@ -84,13 +84,67 @@ impl<'a> EpubIndex<'a> {
         )
     }
 
+    fn get_spine_item_path(
+        style: &Style,
+        spine_navigation_maps: &[SpineNavigationMap],
+        spine_item: &EpubSpineItem,
+    ) -> anyhow::Result<String> {
+        Ok(match style.inject_navigation {
+            true => spine_navigation_maps
+                .iter()
+                .find(|map| map.spine_item == spine_item)
+                .with_context(|| {
+                    format!(
+                        "Internal error: failed to find {} in spine navigation maps.",
+                        &spine_item.path
+                    )
+                })?
+                .navigation_filename
+                .clone(),
+            false => spine_item.path.as_str().to_string(),
+        })
+    }
+
+    fn get_toc_item_path(
+        style: &Style,
+        rendition_contents_dir: &Utf8Path,
+        spine_navigation_maps: &[SpineNavigationMap],
+        toc_item: &EpubTocItem,
+    ) -> anyhow::Result<String> {
+        Ok(match style.inject_navigation {
+            true => {
+                let mut navigation_path = spine_navigation_maps
+                    .iter()
+                    .find(|map| map.spine_item.path == toc_item.path_without_fragment)
+                    .with_context(|| {
+                        format!(
+                            "Internal error: failed to find {} in spine navigation maps.",
+                            &toc_item.path_without_fragment
+                        )
+                    })?
+                    .navigation_filename
+                    .clone();
+                if let Some(fragment) = &toc_item.fragment {
+                    navigation_path.push_str(fragment);
+                }
+                navigation_path
+            }
+            false => rendition_contents_dir
+                .join(&toc_item.path_with_fragment)
+                .as_str()
+                .to_string(),
+        })
+    }
+
     fn list_toc_items_for_linear_index_spine_entry_recursive<
         W: Write,
         T: Iterator<Item = &'a EpubTocItem>,
     >(
         writer: &mut EventWriter<W>,
+        style: &Style,
         spine_associated_toc_items_iter: &mut std::iter::Peekable<T>,
         rendition_contents_dir: &Utf8Path,
+        spine_navigation_maps: &[SpineNavigationMap],
         current_ul_nesting_level: u64,
     ) -> anyhow::Result<()> {
         while let Some(next_toc_item) = spine_associated_toc_items_iter.peek() {
@@ -99,8 +153,10 @@ impl<'a> EpubIndex<'a> {
                     writer.wrap_xml_element_write(XmlEvent::start_element("ul"), |writer| {
                         Self::list_toc_items_for_linear_index_spine_entry_recursive(
                             writer,
+                            style,
                             spine_associated_toc_items_iter,
                             rendition_contents_dir,
+                            spine_navigation_maps,
                             current_ul_nesting_level + 1,
                         )
                     })?
@@ -109,14 +165,15 @@ impl<'a> EpubIndex<'a> {
                     let toc_item = spine_associated_toc_items_iter.next().context(
                         "Unreachable: no next item on peekable iter which peeked to Some.",
                     )?;
+                    let toc_item_path = Self::get_toc_item_path(
+                        style,
+                        rendition_contents_dir,
+                        spine_navigation_maps,
+                        toc_item,
+                    )?;
                     writer.wrap_xml_element_write(XmlEvent::start_element("li"), |writer| {
                         writer.wrap_xml_element_write(
-                            XmlEvent::start_element("a").attr(
-                                "href",
-                                rendition_contents_dir
-                                    .join(&toc_item.path_with_fragment)
-                                    .as_str(),
-                            ),
+                            XmlEvent::start_element("a").attr("href", &toc_item_path),
                             |writer| writer.write_xml_characters(&toc_item.label),
                         )
                     })?;
@@ -129,31 +186,38 @@ impl<'a> EpubIndex<'a> {
 
     fn list_toc_items_for_linear_index_spine_entry<W: Write>(
         writer: &mut EventWriter<W>,
+        style: &Style,
         spine_associated_toc_items: &[&'a EpubTocItem],
         rendition_contents_dir: &Utf8Path,
+        spine_navigation_maps: &[SpineNavigationMap],
     ) -> anyhow::Result<()> {
         Self::list_toc_items_for_linear_index_spine_entry_recursive(
             writer,
+            style,
             &mut spine_associated_toc_items.iter().copied().peekable(),
             rendition_contents_dir,
+            spine_navigation_maps,
             0,
         )
     }
 
     fn list_toc_items_for_nonlinear_index<W: Write>(
         writer: &mut EventWriter<W>,
+        style: &Style,
         toc: &Vec<&EpubTocItem>,
         rendition_contents_dir: &Utf8Path,
+        spine_navigation_maps: &[SpineNavigationMap],
     ) -> anyhow::Result<()> {
         for toc_item in toc {
+            let toc_item_path = Self::get_toc_item_path(
+                style,
+                rendition_contents_dir,
+                spine_navigation_maps,
+                toc_item,
+            )?;
             writer.wrap_xml_element_write(XmlEvent::start_element("li"), |writer| {
                 writer.wrap_xml_element_write(
-                    XmlEvent::start_element("a").attr(
-                        "href",
-                        rendition_contents_dir
-                            .join(&toc_item.path_with_fragment)
-                            .as_str(),
-                    ),
+                    XmlEvent::start_element("a").attr("href", &toc_item_path),
                     |writer| writer.write_xml_characters(&toc_item.label),
                 )
             })?;
@@ -161,8 +225,10 @@ impl<'a> EpubIndex<'a> {
                 writer.wrap_xml_element_write(XmlEvent::start_element("ul"), |writer| {
                     Self::list_toc_items_for_nonlinear_index(
                         writer,
+                        style,
                         &toc_item.children.iter().collect(),
                         rendition_contents_dir,
+                        spine_navigation_maps,
                     )
                 })?;
             }
@@ -173,7 +239,9 @@ impl<'a> EpubIndex<'a> {
     pub fn to_xhtml(
         &self,
         epub_info: &EpubInfo,
+        style: &Style,
         rendition_contents_dir_relative_path: Utf8PathBuf,
+        spine_navigation_maps: &[SpineNavigationMap],
     ) -> anyhow::Result<Vec<u8>> {
         let xhtml_buffer = Vec::new();
         let mut writer = xml::EmitterConfig::new()
@@ -270,6 +338,7 @@ impl<'a> EpubIndex<'a> {
                                     },
                                 )?;
                                 for (spine_item, toc_items) in mapping_vec {
+                                    let spine_item_path = Self::get_spine_item_path(style, spine_navigation_maps, spine_item)?;
                                     writer.wrap_xml_element_write(
                                         XmlEvent::start_element("tr"),
                                         |writer| {
@@ -283,7 +352,7 @@ impl<'a> EpubIndex<'a> {
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
                                                                     writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
-                                                                        writer.write_xml_characters(spine_item.path.as_str())
+                                                                        writer.write_xml_characters(&spine_item_path)
                                                                     })
                                                                 },
                                                             )
@@ -301,7 +370,7 @@ impl<'a> EpubIndex<'a> {
                                                     false => writer.wrap_xml_element_write(
                                                         XmlEvent::start_element("ul"),
                                                         |writer| {
-                                                            Self::list_toc_items_for_linear_index_spine_entry(writer, toc_items, &rendition_contents_dir_relative_path)
+                                                            Self::list_toc_items_for_linear_index_spine_entry(writer, style, toc_items, &rendition_contents_dir_relative_path, spine_navigation_maps)
                                                         },
                                                     ),
                                                 },
@@ -347,11 +416,12 @@ impl<'a> EpubIndex<'a> {
                                                     XmlEvent::start_element("ul"),
                                                     |writer| {
                                                         for spine_item in spine {
+                                                            let spine_item_path = Self::get_spine_item_path(style, spine_navigation_maps, spine_item)?;
                                                             writer.wrap_xml_element_write(
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
-                                                                    writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
-                                                                        writer.write_xml_characters(spine_item.path.as_str())
+                                                                    writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item_path).as_str()), |writer| {
+                                                                        writer.write_xml_characters(&spine_item_path)
                                                                     })
                                                                 },
                                                             )?;
@@ -378,8 +448,10 @@ impl<'a> EpubIndex<'a> {
                                                     |writer| {
                                                         Self::list_toc_items_for_nonlinear_index(
                                                             writer,
+                                                            style,
                                                             toc,
                                                             &rendition_contents_dir_relative_path,
+                                                            spine_navigation_maps,
                                                         )
                                                     },
                                                 )
