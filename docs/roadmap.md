@@ -52,8 +52,6 @@
 - Maybe move TOC to display above the spine-and-TOC pair, in the index, to improve ergonomics for users uninterested in the guts?
 - Experiment and see if the link color in the black theme should be made lighter
 - Look more into alternatives to `cli-table` for print outputs; possibly just roll my own, even
-- Consider renaming the CLI `stylesheets` parameter to `stylesheet`, since users will rarely want to use more than one, it might get confusing, and clap's `long = "stylesheet"` option is broken.
-	- Also submit an issue report with clap about that brokenness
 - Consider whether to add styles: line spacing, paragraph spacing, start-of-paragraph indentation
 - List word count per spine-section, in the spine-section-listing?
 	- In theory maybe even implement an optional progress bar based on this, via some sort of clever hardcoding? If practical to implement in CSS-without-JS.
@@ -66,4 +64,3 @@
 	- Other?
 - Consider defining the rest of the ProjectDirs fields, not just the application name
 - Reasily-style page-number-display?
-- Traitify XML helpers as with path helpers?

@@ -338,9 +338,8 @@ pub fn wrap_xhtml_source_for_navigation(
         .create_reader(Cursor::new(&source));
 
     let mut base_href = None;
-    let mut base_target = None;
 
-    // First pass: read and determine the correct value for the base attribute to be written
+    // First pass: read and determine the correct href for the base attribute to be written
     for event in first_pass_reader {
         match event.context("XML parse failure.")? {
             XmlReaderEvent::StartElement {
@@ -353,15 +352,7 @@ pub fn wrap_xhtml_source_for_navigation(
                     .as_ref()
                     .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
             {
-                // Note the base's target, if specified, and determine our base's correct href based on the one used here, if one is specified here
-                if base_target.is_none()
-                    && let Some(target_attribute) = attributes
-                        .iter()
-                        .find(|attribute| attribute.name.local_name == "target")
-                {
-                    base_target = Some(target_attribute.value.clone());
-                }
-
+                // Determine our base's correct href based on the one used here, if one is specified here
                 if let Some(href_attribute) = attributes
                     .iter()
                     .find(|attribute| attribute.name.local_name == "href")
@@ -424,8 +415,7 @@ pub fn wrap_xhtml_source_for_navigation(
         .pad_self_closing(false)
         .create_writer(wrapped_source_buffer);
 
-    // Second pass: write base with defined href (and, if any, target) to head, and if encountering any other base elements get rid of them.
-    // (This will potentially mildly break things, if weird stuff was done with their global attributes. If any better solution exists, it'd be nice to switch to it. But it's likely that very few books will actually fall victim to this.)
+    // Second pass: write base with defined href to head, superseding any other base hrefs which might be defined later
     for event in second_pass_reader {
         match event.context("XML parse failure.")? {
             XmlReaderEvent::StartElement {
@@ -438,7 +428,7 @@ pub fn wrap_xhtml_source_for_navigation(
                     .as_ref()
                     .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
             {
-                // Immediately upon start of head, write base tag with the specified href
+                // Write start of head, then immediately write base tag with the specified href
                 let reader_event_rebuilt = XmlReaderEvent::StartElement {
                     name,
                     attributes,
@@ -451,31 +441,13 @@ pub fn wrap_xhtml_source_for_navigation(
                     .write(writer_event)
                     .context("Failed to write <head> element XML to new buffer.")?;
 
-                match base_target.take() {
-                    Some(target_unwrapped) => wrapped_source_buffer_writer.wrap_xml_element_write(
-                        XmlWriterEvent::start_element("base")
-                            .attr("href", &base_href_unwrapped)
-                            .attr("target", &target_unwrapped),
-                        |_writer| Ok(()),
-                    )?,
-                    None => wrapped_source_buffer_writer.wrap_xml_element_write(
-                        XmlWriterEvent::start_element("base").attr("href", &base_href_unwrapped),
-                        |_writer| Ok(()),
-                    )?,
-                }
-            }
-            XmlReaderEvent::StartElement {
-                name, namespace, ..
-            } if name.local_name == "base"
-                && name
-                    .namespace
-                    .as_ref()
-                    .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
-            {
-                // Any bases encountered in the reader shouldn't be carried to the writer.
+                wrapped_source_buffer_writer.wrap_xml_element_write(
+                    XmlWriterEvent::start_element("base").attr("href", &base_href_unwrapped),
+                    |_writer| Ok(()),
+                )?;
             }
             other_reader_event => {
-                // For otherwise-unmarked reader events, transcribe them unchanged
+                // Transcribe everything else unchanged
                 if let Some(writer_event) = other_reader_event.as_writer_event() {
                     wrapped_source_buffer_writer
                         .write(writer_event)
