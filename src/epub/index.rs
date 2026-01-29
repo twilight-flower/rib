@@ -295,25 +295,25 @@ impl<'a> EpubIndex<'a> {
                             |_writer| Ok(()),
                         )?;
                     }
+                    let start_spine_item = epub_info.spine_items.iter().find(|item| item.path == epub_info.first_linear_spine_item_path).context("Internal error: first linear spine item path not found as path of any spine items.")?;
+                    let start_spine_item_path = Self::get_spine_item_path(style, spine_navigation_maps, start_spine_item)?;
                     writer.wrap_xml_element_write(XmlEvent::start_element("p"), |writer| {
                         writer.wrap_xml_element_write(
                             XmlEvent::start_element("a").attr(
                                 "href",
-                                rendition_contents_dir_relative_path
-                                    .join(&epub_info.first_linear_spine_item_path)
-                                    .as_str(),
+                                &start_spine_item_path,
                             ),
                             |writer| writer.write_xml_characters("Start"),
                         )
                     })?;
                     // Bodymatter link in similar style to start and end links, if there's a good way to get it within the limits of this epub crate
+                    let end_spine_item = epub_info.spine_items.iter().find(|item| item.path == epub_info.last_linear_spine_item_path).context("Internal error: last linear spine item path not found as path of any spine items.")?;
+                    let end_spine_item_path = Self::get_spine_item_path(style, spine_navigation_maps, end_spine_item)?;
                     writer.wrap_xml_element_write(XmlEvent::start_element("p"), |writer| {
                         writer.wrap_xml_element_write(
                             XmlEvent::start_element("a").attr(
                                 "href",
-                                rendition_contents_dir_relative_path
-                                    .join(&epub_info.last_linear_spine_item_path)
-                                    .as_str(),
+                                &end_spine_item_path,
                             ),
                             |writer| writer.write_xml_characters("End"),
                         )
@@ -351,8 +351,8 @@ impl<'a> EpubIndex<'a> {
                                                             writer.wrap_xml_element_write(
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
-                                                                    writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item.path).as_str()), |writer| {
-                                                                        writer.write_xml_characters(&spine_item_path)
+                                                                    writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item_path).as_str()), |writer| {
+                                                                        writer.write_xml_characters(spine_item.path.as_str())
                                                                     })
                                                                 },
                                                             )
@@ -421,7 +421,7 @@ impl<'a> EpubIndex<'a> {
                                                                 XmlEvent::start_element("li"),
                                                                 |writer| {
                                                                     writer.wrap_xml_element_write(XmlEvent::start_element("a").attr("href", rendition_contents_dir_relative_path.join(&spine_item_path).as_str()), |writer| {
-                                                                        writer.write_xml_characters(&spine_item_path)
+                                                                        writer.write_xml_characters(spine_item.path.as_str())
                                                                     })
                                                                 },
                                                             )?;
