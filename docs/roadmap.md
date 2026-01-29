@@ -5,8 +5,7 @@
 - Add support for EPUB 3 TOCs, likely via an upstream PR to the `epub` crate.
 - Add support for SVG spine items.
 - Update `epub` crate to include the NCX-path-fix once there's a release with that
-- Fix handling of `<br>` tags, which currently are (to browser parsers' eyes) doubled
-	- This is because they're [void elements](https://developer.mozilla.org/en-US/docs/Glossary/Void_element). Probably the answer here is a generalized policy of, when writing void elements, writing them in self-closing form rather than non-self-closing form. Figure out how to make the XML writer vary on that axis.
+- Fix doubling of void elements like `<br>` in contexts where browsers interpret section XHTML as HTML
 
 # Potential-bugfix exploration
 
@@ -36,9 +35,7 @@
 - Add styles: font-family, font-size, opened-link-color, custom CSS
 - Add flag to open to a specific spine-section, probably 1-indexed
 - Render nonlinear spine items at reduced opacity in the index, as a visual indicator of their nonlinearity
-- Focus the inside of the section iframe on load, so that scrolling via page-down works without needing the frame clicked into first
 - Make library path configurable, in case people want to store their libraries somewhere other than the default ephemeral data dir or the default ephemeral data dir is non-UTF-8
-- Explicitly remove script tags from book sections, until such a time as I figure out safe sandboxing.
 
 # Feature Consideration/Research
 
@@ -64,3 +61,4 @@
 	- Other?
 - Consider defining the rest of the ProjectDirs fields, not just the application name
 - Reasily-style page-number-display?
+- Do I want to disable spine-level scripting, via e.g. removing script tags from spine-entries as part of their adjustment-when-they're-adjusted?
