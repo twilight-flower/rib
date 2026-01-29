@@ -271,18 +271,20 @@ impl Library {
         for (spine_index, spine_navigation_map) in spine_navigation_maps.iter().enumerate() {
             let section_path =
                 Utf8Path::new("contents").join(&spine_navigation_map.spine_item.path);
-            let navigation_wrapper_file = crate::epub::navigation::create_navigation_wrapper(
+            let navigation_contents_wrapped =
+                xhtml::wrap_xhtml_source_for_navigation(rendition_dir_path, &section_path)?;
+            let navigation_file = crate::epub::navigation::create_navigation_file(
                 epub_info,
                 spine_navigation_maps,
                 spine_index,
                 style,
-                &section_path,
+                &navigation_contents_wrapped,
             )?;
-            let navigation_wrapper_file_path =
+            let navigation_file_path =
                 rendition_dir_path.join(&spine_navigation_map.navigation_filename);
-            write(&navigation_wrapper_file_path, navigation_wrapper_file).with_context(|| {
+            write(&navigation_file_path, navigation_file).with_context(|| {
                 format!(
-                    "Failed to write rendition navigation stylesheet to {navigation_wrapper_file_path}."
+                    "Failed to write rendition navigation stylesheet to {navigation_file_path}."
                 )
             })?;
         }

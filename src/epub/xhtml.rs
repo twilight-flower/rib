@@ -2,8 +2,8 @@ use std::{fs::read, io::Cursor, ops::IndexMut, str::FromStr};
 
 use anyhow::Context;
 use camino::Utf8Path;
-use url::Url;
-use xml::{EmitterConfig, reader::XmlEvent};
+use url::{ParseError, Url};
+use xml::{EmitterConfig, reader::XmlEvent as XmlReaderEvent, writer::XmlEvent as XmlWriterEvent};
 
 use crate::{
     css::{CssBlock, CssBlockContents, CssFile},
@@ -126,13 +126,12 @@ pub fn adjust_xhtml_source(
     spine_navigation_maps: &[SpineNavigationMap],
     style: &Style,
 ) -> anyhow::Result<Vec<u8>> {
-    let source_file =
-        read(source_path).with_context(|| format!("Failed to read {source_path}."))?;
+    let source = read(source_path).with_context(|| format!("Failed to read {source_path}."))?;
     let reader = xml::ParserConfig::new()
         .add_entities(XHTML_ENTITIES)
         .ignore_comments(false)
         .override_encoding(Some(xml::Encoding::Utf8))
-        .create_reader(Cursor::new(source_file));
+        .create_reader(Cursor::new(source));
 
     let adjusted_source_buffer = Vec::new();
     let mut adjusted_source_buffer_writer = EmitterConfig::new()
@@ -156,7 +155,7 @@ pub fn adjust_xhtml_source(
 
     for event in reader {
         match event.context("XML parse failure.")? {
-            XmlEvent::StartElement {
+            XmlReaderEvent::StartElement {
                 name,
                 mut attributes,
                 namespace,
@@ -173,14 +172,15 @@ pub fn adjust_xhtml_source(
                     .iter_mut()
                     .find(|attribute| attribute.name.local_name == "href");
                 let target = match href {
-                    Some(ref attribute) => Some(match Url::parse(&attribute.value) {
+                    Some(ref href_attribute) => Some(match Url::parse(&href_attribute.value) {
                         Ok(_absolute_path) => "_blank".to_string(),
-                        Err(url::ParseError::RelativeUrlWithoutBase) => {
-                            relative_path_target.to_string()
-                        }
+                        Err(ParseError::RelativeUrlWithoutBase) => relative_path_target.to_string(),
                         Err(e) => {
                             return Err(e).with_context(|| {
-                                format!(r#"URL parse error on <a href="{}">"#, &attribute.value)
+                                format!(
+                                    r#"URL parse error on <a href="{}">"#,
+                                    &href_attribute.value
+                                )
                             });
                         }
                     }),
@@ -230,7 +230,7 @@ pub fn adjust_xhtml_source(
                         }
                     }
                 }
-                let reader_event_rebuilt = XmlEvent::StartElement {
+                let reader_event_rebuilt = XmlReaderEvent::StartElement {
                     name,
                     attributes,
                     namespace,
@@ -242,7 +242,7 @@ pub fn adjust_xhtml_source(
                     .write(writer_event)
                     .context("Failed to write updated <a> element XML to new buffer.")?;
             }
-            XmlEvent::StartElement {
+            XmlReaderEvent::StartElement {
                 name,
                 attributes,
                 namespace,
@@ -261,7 +261,7 @@ pub fn adjust_xhtml_source(
                     .to_file_url()?;
                 let stylesheet_url_relative = destination_url.make_relative(&stylesheet_url_absolute).with_context(|| format!("Internal error: failed to get relative URL from {destination_url} to {stylesheet_url_absolute}."))?;
 
-                let reader_event_rebuilt = XmlEvent::StartElement {
+                let reader_event_rebuilt = XmlReaderEvent::StartElement {
                     name,
                     attributes,
                     namespace,
@@ -273,13 +273,13 @@ pub fn adjust_xhtml_source(
                     .write(writer_event)
                     .context("Failed to write <head> element XML to new buffer.")?;
                 adjusted_source_buffer_writer.wrap_xml_element_write(
-                    xml::writer::events::XmlEvent::start_element("link")
+                    XmlWriterEvent::start_element("link")
                         .attr("rel", "stylesheet")
                         .attr("href", &stylesheet_url_relative),
                     |_writer| Ok(()),
                 )?;
             }
-            XmlEvent::EndElement { name }
+            XmlReaderEvent::EndElement { name }
                 if name.local_name == "head"
                     && name
                         .namespace
@@ -296,12 +296,12 @@ pub fn adjust_xhtml_source(
                 let stylesheet_url_relative = destination_url.make_relative(&stylesheet_url_absolute).with_context(|| format!("Internal error: failed to get relative URL from {destination_url} to {stylesheet_url_absolute}."))?;
 
                 adjusted_source_buffer_writer.wrap_xml_element_write(
-                    xml::writer::events::XmlEvent::start_element("link")
+                    XmlWriterEvent::start_element("link")
                         .attr("rel", "stylesheet")
                         .attr("href", stylesheet_url_relative.as_str()),
                     |_writer| Ok(()),
                 )?;
-                let reader_event_rebuilt = XmlEvent::EndElement { name };
+                let reader_event_rebuilt = XmlReaderEvent::EndElement { name };
                 let writer_event = reader_event_rebuilt.as_writer_event().context(
                     "Internal error: failed to convert reader </head> EndElement event to writer format.",
                 )?;
@@ -321,4 +321,170 @@ pub fn adjust_xhtml_source(
     }
 
     Ok(adjusted_source_buffer_writer.into_inner())
+}
+
+pub fn wrap_xhtml_source_for_navigation(
+    rendition_dir_path: &Utf8Path,
+    source_path_from_rendition_dir: &Utf8Path,
+) -> anyhow::Result<String> {
+    let source_path_absolute = rendition_dir_path.join(source_path_from_rendition_dir);
+    let source = read(&source_path_absolute)
+        .with_context(|| format!("Failed to read {source_path_absolute}."))?;
+
+    let first_pass_reader = xml::ParserConfig::new()
+        .add_entities(XHTML_ENTITIES)
+        .ignore_comments(false)
+        .override_encoding(Some(xml::Encoding::Utf8))
+        .create_reader(Cursor::new(&source));
+
+    let mut base_href = None;
+    let mut base_target = None;
+
+    // First pass: read and determine the correct value for the base attribute to be written
+    for event in first_pass_reader {
+        match event.context("XML parse failure.")? {
+            XmlReaderEvent::StartElement {
+                name,
+                attributes,
+                namespace,
+            } if name.local_name == "base"
+                && name
+                    .namespace
+                    .as_ref()
+                    .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
+            {
+                // Note the base's target, if specified, and determine our base's correct href based on the one used here, if one is specified here
+                if base_target.is_none()
+                    && let Some(target_attribute) = attributes
+                        .iter()
+                        .find(|attribute| attribute.name.local_name == "target")
+                {
+                    base_target = Some(target_attribute.value.clone());
+                }
+
+                if let Some(href_attribute) = attributes
+                    .iter()
+                    .find(|attribute| attribute.name.local_name == "href")
+                {
+                    match Url::parse(&href_attribute.value) {
+                        Ok(_) => {
+                            // If the href is to an absolute URL, it remains the correct base
+                            base_href = Some(href_attribute.value.clone());
+                            break;
+                        }
+                        Err(ParseError::RelativeUrlWithoutBase) => {
+                            // If the href is to a relative URL, prefix it with the source file path from the navigation file
+                            let base_url = rendition_dir_path.to_dir_url()?;
+                            let url_with_navigation_path = base_url.join(source_path_from_rendition_dir.as_str()).with_context(|| format!("Internal error: couldn't join {source_path_from_rendition_dir} to {base_url} during wrapping-for-navigation of source XHTML."))?;
+                            let url_with_href_joined = url_with_navigation_path.join(&href_attribute.value).with_context(|| format!("Ill-formed EPUB: couldn't join base {} to {url_with_navigation_path}.", &href_attribute.value))?;
+                            let new_href_url = base_url.make_relative(&url_with_href_joined).with_context(|| format!("Ill-formed EPUB: couldn't get relative URL from {base_url} to {url_with_href_joined}."))?;
+                            base_href = Some(new_href_url);
+                            break;
+                        }
+                        Err(e) => {
+                            return Err(e).with_context(|| {
+                                format!(
+                                    r#"URL parse error on <base href="{}">"#,
+                                    &href_attribute.value
+                                )
+                            });
+                        }
+                    }
+                }
+            }
+            XmlReaderEvent::EndElement { name }
+                if name.local_name == "head"
+                    && name
+                        .namespace
+                        .as_ref()
+                        .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
+            {
+                // If no base href was found in the head before its end, use the source path from the navigation file
+                base_href = Some(source_path_from_rendition_dir.as_str().to_string());
+                break;
+            }
+            _ => (),
+        }
+    }
+
+    let base_href_unwrapped =
+        base_href.context("Ill-formed EPUB: XHTML content document has no head ending tag.")?;
+
+    let second_pass_reader = xml::ParserConfig::new()
+        .add_entities(XHTML_ENTITIES)
+        .ignore_comments(false)
+        .override_encoding(Some(xml::Encoding::Utf8))
+        .create_reader(Cursor::new(source));
+
+    let wrapped_source_buffer = Vec::new();
+    let mut wrapped_source_buffer_writer = EmitterConfig::new()
+        .write_document_declaration(false)
+        .normalize_empty_elements(false)
+        .autopad_comments(false)
+        .pad_self_closing(false)
+        .create_writer(wrapped_source_buffer);
+
+    // Second pass: write base with defined href (and, if any, target) to head, and if encountering any other base elements get rid of them.
+    // (This will potentially mildly break things, if weird stuff was done with their global attributes. If any better solution exists, it'd be nice to switch to it. But it's likely that very few books will actually fall victim to this.)
+    for event in second_pass_reader {
+        match event.context("XML parse failure.")? {
+            XmlReaderEvent::StartElement {
+                name,
+                attributes,
+                namespace,
+            } if name.local_name == "head"
+                && name
+                    .namespace
+                    .as_ref()
+                    .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
+            {
+                // Immediately upon start of head, write base tag with the specified href
+                let reader_event_rebuilt = XmlReaderEvent::StartElement {
+                    name,
+                    attributes,
+                    namespace,
+                };
+                let writer_event = reader_event_rebuilt.as_writer_event().context(
+                    "Internal error: failed to convert reader <head> StartElement event to writer format.",
+                )?;
+                wrapped_source_buffer_writer
+                    .write(writer_event)
+                    .context("Failed to write <head> element XML to new buffer.")?;
+
+                match base_target.take() {
+                    Some(target_unwrapped) => wrapped_source_buffer_writer.wrap_xml_element_write(
+                        XmlWriterEvent::start_element("base")
+                            .attr("href", &base_href_unwrapped)
+                            .attr("target", &target_unwrapped),
+                        |_writer| Ok(()),
+                    )?,
+                    None => wrapped_source_buffer_writer.wrap_xml_element_write(
+                        XmlWriterEvent::start_element("base").attr("href", &base_href_unwrapped),
+                        |_writer| Ok(()),
+                    )?,
+                }
+            }
+            XmlReaderEvent::StartElement {
+                name, namespace, ..
+            } if name.local_name == "base"
+                && name
+                    .namespace
+                    .as_ref()
+                    .is_none_or(|namespace| namespace == "http://www.w3.org/1999/xhtml") =>
+            {
+                // Any bases encountered in the reader shouldn't be carried to the writer.
+            }
+            other_reader_event => {
+                // For otherwise-unmarked reader events, transcribe them unchanged
+                if let Some(writer_event) = other_reader_event.as_writer_event() {
+                    wrapped_source_buffer_writer
+                        .write(writer_event)
+                        .context("Failed to write parsed XML to new buffer.")?;
+                }
+            }
+        }
+    }
+
+    let wrapped_source_string = String::from_utf8(wrapped_source_buffer_writer.into_inner()).with_context(|| format!("Internal error: {source_path_absolute} wasn't encoded to valid UTF-8 after wrapping for navigation."))?;
+    Ok(wrapped_source_string)
 }

@@ -56,20 +56,19 @@ impl EpubTocItem {
         source: epub::doc::NavPoint,
         nesting_level: u64,
     ) -> anyhow::Result<Self> {
-        // Library path is never used in its capacity as the path of the library specifically. But it's a predictably-valid path that can be used as a URL base for subsequent manipulations, where the URL parser has enough cross-platform variation that one can't trivially just use e.g. "/" as a safe base path.
-        let root_url = library_path.to_dir_url()?;
+        let base_url = library_path.to_dir_url()?; // Can be any URL as long as it's well-formed; but this one is convenient to get a hold of
         let path_str = source
             .content
             .to_str()
             .context("Ill-formed EPUB: non-UTF-8 path encountered.")?;
-        let path_url = root_url.join(path_str).with_context(|| {
+        let path_url = base_url.join(path_str).with_context(|| {
             format!("Ill-formed EPUB: TOC contains path {path_str} which extends above EPUB root.")
         })?;
         let path_url_without_fragment = path_url.without_suffixes();
-        let path_string_with_fragment = root_url
+        let path_string_with_fragment = base_url
             .make_relative(&path_url)
             .context("Internal error: failed to make joined path relative again.")?;
-        let path_string_without_fragment = root_url
+        let path_string_without_fragment = base_url
             .make_relative(&path_url_without_fragment)
             .context("Internal error: failed to make joined path relative again.")?;
         let path_with_fragment = Utf8Path::new(&path_string_with_fragment).standardize_separators();

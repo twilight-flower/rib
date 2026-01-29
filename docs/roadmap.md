@@ -7,8 +7,6 @@
 - Update `epub` crate to include the NCX-path-fix once there's a release with that
 - Fix handling of `<br>` tags, which currently are (to browser parsers' eyes) doubled
 	- This is because they're [void elements](https://developer.mozilla.org/en-US/docs/Glossary/Void_element). Probably the answer here is a generalized policy of, when writing void elements, writing them in self-closing form rather than non-self-closing form. Figure out how to make the XML writer vary on that axis.
-- Update back away from `src` and towards a pairing of `srcdoc` plus a compensatory `base` tag, so that CORS doesn't interfere with fragment-following
-	- (Be careful that the `base` doesn't interfere with any `base` preexistingly in the source. Scan head for base before adding one; if one already exists, edit it instead.)
 
 # Potential-bugfix exploration
 
