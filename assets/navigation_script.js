@@ -13,6 +13,6 @@ function focus_section_iframe() {
 
 window.onload = _ => {
 	pass_window_hash_to_section_iframe;
-	focus_section_iframe()
+	focus_section_iframe();
 }
 window.onhashchange = pass_window_hash_to_section_iframe;

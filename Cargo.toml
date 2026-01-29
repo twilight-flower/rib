@@ -3,7 +3,7 @@
 name = "rib"
 edition = "2024"
 
-version = "0.1.1"
+version = "0.1.2"
 
 description = "Browser-based EPUB reader."
 repository = "https://github.com/twilight-flower/rib"
@@ -13,7 +13,7 @@ keywords = ["epub", "ebook"]
 categories = ["command-line-utilities"]
 
 rust-version = "1.88.0"
-exclude = [".github/workflows/release.yml", "docs/*", ".gitignore", "dist-workspace.toml"]
+exclude = [".github/*", "docs/*", ".gitignore", "dist-workspace.toml"]
 
 [dependencies]
 

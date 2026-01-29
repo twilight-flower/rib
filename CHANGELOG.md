@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2
 
 - Focus book section on load of navigation page
 - Fix TOC-parsing problems which led some books to be falsely rejected as invalid on the basis of TOCs which were actually valid.

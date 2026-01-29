@@ -16,7 +16,7 @@ Comment out the `rust-version` field from `Cargo.toml`, then run:
 cargo msrv find
 ```
 
-Uncomment the field and set it to match the command's output.
+Uncomment the field and set it to match the command's output MSRV.
 
 ### Update version
 
